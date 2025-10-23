@@ -42,21 +42,48 @@ class CallBlockingService : CallScreeningService() {
                 val currentTime = LocalTime.now()
                 val dayOfWeek = now.dayOfWeek.value // 1=Monday, 7=Sunday
 
-                // Get all blocking rules for this number
-                val blockingRules = database.blockingRuleDao().getRuleByPhoneNumber(normalizePhoneNumber(phoneNumber))
+                Log.d(TAG, "Current day: $dayOfWeek, Current time: $currentTime")
 
-                for (rule in blockingRules) {
+                // Get all active blocking rules and check each one
+                val allRules = database.blockingRuleDao().getAllActiveRules()
+                Log.d(TAG, "Total active rules in database: ${allRules.size}")
+
+                // Try to match the phone number
+                val normalizedNumber = normalizePhoneNumber(phoneNumber)
+                var matchingRules = listOf<BlockingRuleEntity>()
+
+                for (rule in allRules) {
+                    val ruleNumber = normalizePhoneNumber(rule.phoneNumber)
+                    Log.d(TAG, "Comparing incoming '$normalizedNumber' with rule '$ruleNumber'")
+
+                    if (phoneNumbersMatch(normalizedNumber, ruleNumber)) {
+                        matchingRules = matchingRules + rule
+                        Log.d(TAG, "MATCH found with ${rule.contactName}")
+                    }
+                }
+
+                Log.d(TAG, "Found ${matchingRules.size} matching rules")
+
+                for (rule in matchingRules) {
+                    Log.d(TAG, "Checking rule: ${rule.contactName}")
+
                     // Parse days of week from string
                     val ruleDays = rule.daysOfWeek.split(",").mapNotNull { it.toIntOrNull() }
+                    Log.d(TAG, "Rule days: $ruleDays")
 
                     // Check if rule applies today
                     if (!ruleDays.contains(dayOfWeek)) {
+                        Log.d(TAG, "Rule doesn't apply today")
                         continue
                     }
+
+                    Log.d(TAG, "Rule applies today!")
 
                     // Check if we're in the blocking time window
                     val startTime = LocalTime.parse(rule.startTime, DateTimeFormatter.ofPattern("HH:mm"))
                     val endTime = LocalTime.parse(rule.endTime, DateTimeFormatter.ofPattern("HH:mm"))
+
+                    Log.d(TAG, "Time window: ${rule.startTime} - ${rule.endTime}")
 
                     val inTimeWindow = if (startTime.isBefore(endTime)) {
                         // Normal case: e.g., 9:00 AM to 5:00 PM
@@ -66,17 +93,19 @@ class CallBlockingService : CallScreeningService() {
                         currentTime.isAfter(startTime) || currentTime.isBefore(endTime)
                     }
 
+                    Log.d(TAG, "In time window: $inTimeWindow")
+
                     if (inTimeWindow) {
                         // Check emergency bypass
                         if (rule.allowEmergency) {
                             val retryWindowMillis = rule.retryWindow * 60 * 1000L
                             val lastAttempt = database.callAttemptDao().getLastAttempt(
-                                normalizePhoneNumber(phoneNumber),
+                                normalizedNumber,
                                 System.currentTimeMillis() - retryWindowMillis
                             )
 
                             if (lastAttempt != null) {
-                                Log.d(TAG, "Emergency bypass: allowing call from $phoneNumber")
+                                Log.d(TAG, "Emergency bypass activated!")
                                 return@runBlocking false
                             }
                         }
@@ -84,21 +113,41 @@ class CallBlockingService : CallScreeningService() {
                         // Record this call attempt
                         database.callAttemptDao().insert(
                             CallAttemptEntity(
-                                phoneNumber = normalizePhoneNumber(phoneNumber),
+                                phoneNumber = normalizedNumber,
                                 timestamp = System.currentTimeMillis(),
                                 wasBlocked = true
                             )
                         )
+
+                        Log.d(TAG, "Call will be BLOCKED")
                         return@runBlocking true
                     }
                 }
 
+                Log.d(TAG, "No matching rules, call will be ALLOWED")
                 false
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error checking if call should be blocked", e)
             false
         }
+    }
+
+    private fun phoneNumbersMatch(number1: String, number2: String): Boolean {
+        // Remove all non-digit characters except +
+        val clean1 = number1.replace(Regex("[^+\\d]"), "")
+        val clean2 = number2.replace(Regex("[^+\\d]"), "")
+
+        // If both have country code, match exactly
+        if (clean1.startsWith("+") && clean2.startsWith("+")) {
+            return clean1 == clean2
+        }
+
+        // Otherwise, match last 10 digits (handles country code differences)
+        val digits1 = clean1.replace("+", "").takeLast(10)
+        val digits2 = clean2.replace("+", "").takeLast(10)
+
+        return digits1 == digits2
     }
 
     private fun normalizePhoneNumber(number: String): String {

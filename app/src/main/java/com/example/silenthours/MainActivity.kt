@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,6 +65,7 @@ fun HomeScreen(
     val freeSlots = 3
     var showAddDialog by remember { mutableStateOf(false) }
     var showUpgradeDialog by remember { mutableStateOf(false) }
+    var editingRule by remember { mutableStateOf<BlockingRule?>(null) }
     val context = LocalContext.current
     var blockingRules by remember { mutableStateOf(listOf<BlockingRule>()) }
 
@@ -288,7 +290,7 @@ fun HomeScreen(
                         BlockingRuleCard(
                             rule = rule,
                             onEdit = { editRule ->
-                                // Edit functionality placeholder
+                                editingRule = editRule
                             },
                             onDelete = { deleteRule ->
                                 blockingRules = blockingRules.filter { it.id != deleteRule.id }
@@ -314,6 +316,20 @@ fun HomeScreen(
         )
     }
 
+    if (editingRule != null) {
+        AddBlockDialog(
+            context = context,
+            database = database,
+            editingRule = editingRule,
+            onDismiss = { editingRule = null },
+            onSave = { rule ->
+                // Update the rule in the list
+                blockingRules = blockingRules.map { if (it.phoneNumber == rule.phoneNumber) rule else it }
+                editingRule = null
+            }
+        )
+    }
+
     if (showUpgradeDialog) {
         AlertDialog(
             onDismissRequest = { showUpgradeDialog = false },
@@ -330,11 +346,12 @@ fun HomeScreen(
 fun AddBlockDialog(
     context: Context,
     database: BlockingRuleDatabase,
+    editingRule: BlockingRule? = null,
     onDismiss: () -> Unit,
     onSave: (BlockingRule) -> Unit
 ) {
-    var contactName by remember { mutableStateOf("") }
-    var phoneNumber by remember { mutableStateOf("") }
+    var contactName by remember { mutableStateOf(editingRule?.contactName ?: "") }
+    var phoneNumber by remember { mutableStateOf(editingRule?.phoneNumber ?: "") }
 
     val contactPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickContact()
@@ -354,31 +371,66 @@ fun AddBlockDialog(
         if (isGranted) contactPickerLauncher.launch(null)
     }
 
+    // Initialize days state from editing rule if exists
     val daysState = remember {
-        mutableStateListOf(
-            DayBlockingState("Mon", false, false),
-            DayBlockingState("Tue", false, false),
-            DayBlockingState("Wed", false, false),
-            DayBlockingState("Thu", false, false),
-            DayBlockingState("Fri", false, false),
-            DayBlockingState("Sat", false, false),
-            DayBlockingState("Sun", false, false)
-        )
+        if (editingRule != null) {
+            // Load all rules for this contact from database to get per-day settings
+            val allRulesForContact = runBlocking {
+                database.blockingRuleDao().getRuleByPhoneNumber(editingRule.phoneNumber)
+            }
+
+            mutableStateListOf(
+                DayBlockingState("Mon", allRulesForContact.any { it.daysOfWeek == "1" }, allRulesForContact.find { it.daysOfWeek == "1" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
+                DayBlockingState("Tue", allRulesForContact.any { it.daysOfWeek == "2" }, allRulesForContact.find { it.daysOfWeek == "2" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
+                DayBlockingState("Wed", allRulesForContact.any { it.daysOfWeek == "3" }, allRulesForContact.find { it.daysOfWeek == "3" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
+                DayBlockingState("Thu", allRulesForContact.any { it.daysOfWeek == "4" }, allRulesForContact.find { it.daysOfWeek == "4" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
+                DayBlockingState("Fri", allRulesForContact.any { it.daysOfWeek == "5" }, allRulesForContact.find { it.daysOfWeek == "5" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
+                DayBlockingState("Sat", allRulesForContact.any { it.daysOfWeek == "6" }, allRulesForContact.find { it.daysOfWeek == "6" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
+                DayBlockingState("Sun", allRulesForContact.any { it.daysOfWeek == "7" }, allRulesForContact.find { it.daysOfWeek == "7" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false)
+            )
+        } else {
+            mutableStateListOf(
+                DayBlockingState("Mon", false, false),
+                DayBlockingState("Tue", false, false),
+                DayBlockingState("Wed", false, false),
+                DayBlockingState("Thu", false, false),
+                DayBlockingState("Fri", false, false),
+                DayBlockingState("Sat", false, false),
+                DayBlockingState("Sun", false, false)
+            )
+        }
     }
 
     val dayTimes = remember {
-        mutableStateMapOf(
-            "Mon" to Pair("22:00", "07:00"),
-            "Tue" to Pair("22:00", "07:00"),
-            "Wed" to Pair("22:00", "07:00"),
-            "Thu" to Pair("22:00", "07:00"),
-            "Fri" to Pair("22:00", "07:00"),
-            "Sat" to Pair("22:00", "07:00"),
-            "Sun" to Pair("22:00", "07:00")
-        )
+        if (editingRule != null) {
+            // Load actual times for each day from database
+            val allRulesForContact = runBlocking {
+                database.blockingRuleDao().getRuleByPhoneNumber(editingRule.phoneNumber)
+            }
+
+            mutableStateMapOf(
+                "Mon" to (allRulesForContact.find { it.daysOfWeek == "1" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
+                "Tue" to (allRulesForContact.find { it.daysOfWeek == "2" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
+                "Wed" to (allRulesForContact.find { it.daysOfWeek == "3" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
+                "Thu" to (allRulesForContact.find { it.daysOfWeek == "4" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
+                "Fri" to (allRulesForContact.find { it.daysOfWeek == "5" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
+                "Sat" to (allRulesForContact.find { it.daysOfWeek == "6" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
+                "Sun" to (allRulesForContact.find { it.daysOfWeek == "7" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00"))
+            )
+        } else {
+            mutableStateMapOf(
+                "Mon" to Pair("22:00", "07:00"),
+                "Tue" to Pair("22:00", "07:00"),
+                "Wed" to Pair("22:00", "07:00"),
+                "Thu" to Pair("22:00", "07:00"),
+                "Fri" to Pair("22:00", "07:00"),
+                "Sat" to Pair("22:00", "07:00"),
+                "Sun" to Pair("22:00", "07:00")
+            )
+        }
     }
 
-    var emergencyBypass by remember { mutableStateOf(true) }
+    var emergencyBypass by remember { mutableStateOf(editingRule?.allowEmergency ?: true) }
     var retryWindow by remember { mutableStateOf(5) }
     var hideNotifications by remember { mutableStateOf(true) }
 
@@ -395,7 +447,7 @@ fun AddBlockDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("New block", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(if (editingRule != null) "Edit block" else "New block", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
                 }
 
@@ -487,8 +539,14 @@ fun AddBlockDialog(
                                 return@Button
                             }
 
-                            // Save one rule per enabled day (allows different times per day)
                             kotlinx.coroutines.runBlocking {
+                                // If editing, delete old rules first
+                                if (editingRule != null) {
+                                    val oldRules = database.blockingRuleDao().getRuleByPhoneNumber(editingRule.phoneNumber)
+                                    oldRules.forEach { database.blockingRuleDao().delete(it) }
+                                }
+
+                                // Save one rule per enabled day (allows different times per day)
                                 val newRules = mutableListOf<BlockingRule>()
 
                                 daysState.forEachIndexed { index, day ->
@@ -547,7 +605,7 @@ fun AddBlockDialog(
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("Save") }
+                    ) { Text(if (editingRule != null) "Update" else "Save") }
 
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
