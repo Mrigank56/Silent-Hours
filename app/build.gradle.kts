@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.silenthours"
-        minSdk = 29
+        minSdk = 24
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
