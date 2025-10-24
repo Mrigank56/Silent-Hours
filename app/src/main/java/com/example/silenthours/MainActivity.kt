@@ -1,6 +1,7 @@
 package com.example.silenthours
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -32,8 +33,17 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
+    private lateinit var billingManager: BillingManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize billing
+        billingManager = BillingManager(this) { isPremium ->
+            // Premium status changed
+            Log.d("MainActivity", "Premium status: $isPremium")
+        }
+
         setContent {
             var isDarkMode by remember { mutableStateOf(true) }
 
@@ -46,11 +56,18 @@ class MainActivity : ComponentActivity() {
                 ) {
                     HomeScreen(
                         isDarkMode = isDarkMode,
-                        onThemeToggle = { isDarkMode = !isDarkMode }
+                        onThemeToggle = { isDarkMode = !isDarkMode },
+                        billingManager = billingManager,
+                        activity = this
                     )
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        billingManager.endConnection()
     }
 }
 
@@ -58,9 +75,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HomeScreen(
     isDarkMode: Boolean,
-    onThemeToggle: () -> Unit
+    onThemeToggle: () -> Unit,
+    billingManager: BillingManager,
+    activity: Activity
 ) {
-    var isPremium by remember { mutableStateOf(false) }
+    val isPremium by billingManager.isPremiumFlow.collectAsState(initial = false)
     var usedSlots by remember { mutableStateOf(0) }
     val freeSlots = 3
     var showAddDialog by remember { mutableStateOf(false) }
@@ -335,7 +354,14 @@ fun HomeScreen(
             onDismissRequest = { showUpgradeDialog = false },
             title = { Text("Upgrade to Premium") },
             text = { Text("Upgrade to Premium for ₹99 (one-time) to add unlimited blocking rules!") },
-            confirmButton = { Button(onClick = { isPremium = true; showUpgradeDialog = false }) { Text("Upgrade") } },
+            confirmButton = {
+                Button(onClick = {
+                    billingManager.purchasePremium(activity)
+                    showUpgradeDialog = false
+                }) {
+                    Text("Upgrade Now")
+                }
+            },
             dismissButton = { TextButton(onClick = { showUpgradeDialog = false }) { Text("Maybe Later") } }
         )
     }
