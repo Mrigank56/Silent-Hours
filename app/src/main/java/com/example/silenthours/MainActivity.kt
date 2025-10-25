@@ -20,7 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,9 +37,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize billing
         billingManager = BillingManager(this) { isPremium ->
-            // Premium status changed
             Log.d("MainActivity", "Premium status: $isPremium")
         }
 
@@ -79,19 +76,18 @@ fun HomeScreen(
     billingManager: BillingManager,
     activity: Activity
 ) {
-    val isPremium by billingManager.isPremiumFlow.collectAsState(initial = false)
+    val isPremium by billingManager.isPremiumFlow.collectAsState(initial = true) // Set to true for development
     var usedSlots by remember { mutableStateOf(0) }
-    val freeSlots = 3
+    val freeSlots = 999 // Unlimited for development
     var showAddDialog by remember { mutableStateOf(false) }
+    var showAddGroupDialog by remember { mutableStateOf(false) }
     var showUpgradeDialog by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<BlockingRule?>(null) }
     val context = LocalContext.current
     var blockingRules by remember { mutableStateOf(listOf<BlockingRule>()) }
 
-    // Initialize database
     val database = remember { BlockingRuleDatabase.getDatabase(context) }
 
-    // Check if app has call screening role
     var hasCallScreeningRole by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -101,7 +97,6 @@ fun HomeScreen(
         }
     }
 
-    // Request call screening role launcher
     val requestRoleLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -111,7 +106,6 @@ fun HomeScreen(
         }
     }
 
-    // Load rules from database on first launch
     LaunchedEffect(Unit) {
         val rulesFromDb = database.blockingRuleDao().getAllRules()
         blockingRules = rulesFromDb.map { entity ->
@@ -163,7 +157,6 @@ fun HomeScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            // Warning card if call screening role not granted
             if (!hasCallScreeningRole && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -248,16 +241,32 @@ fun HomeScreen(
                             )
                         }
                     }
-                    Button(
-                        onClick = {
-                            if (!isPremium && usedSlots >= freeSlots) {
-                                showUpgradeDialog = true
-                            } else {
-                                showAddDialog = true
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                if (!isPremium && usedSlots >= freeSlots) {
+                                    showUpgradeDialog = true
+                                } else {
+                                    showAddDialog = true
+                                }
                             }
+                        ) {
+                            Text("Add")
                         }
-                    ) {
-                        Text("Add")
+                        Button(
+                            onClick = {
+                                if (!isPremium && usedSlots >= freeSlots) {
+                                    showUpgradeDialog = true
+                                } else {
+                                    showAddGroupDialog = true
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary
+                            )
+                        ) {
+                            Text("Add Group")
+                        }
                     }
                 }
             }
@@ -281,16 +290,32 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = {
-                                if (!isPremium && usedSlots >= freeSlots) {
-                                    showUpgradeDialog = true
-                                } else {
-                                    showAddDialog = true
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    if (!isPremium && usedSlots >= freeSlots) {
+                                        showUpgradeDialog = true
+                                    } else {
+                                        showAddDialog = true
+                                    }
                                 }
+                            ) {
+                                Text("Add block")
                             }
-                        ) {
-                            Text("Add block")
+                            Button(
+                                onClick = {
+                                    if (!isPremium && usedSlots >= freeSlots) {
+                                        showUpgradeDialog = true
+                                    } else {
+                                        showAddGroupDialog = true
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary
+                                )
+                            ) {
+                                Text("Add group")
+                            }
                         }
                     }
                 }
@@ -316,14 +341,12 @@ fun HomeScreen(
                                 usedSlots = maxOf(0, usedSlots - 1)
                             },
                             onToggle = { toggleRule, enabled ->
-                                // Update database
                                 kotlinx.coroutines.runBlocking {
                                     val rulesToUpdate = database.blockingRuleDao().getRuleByPhoneNumber(toggleRule.phoneNumber)
                                     rulesToUpdate.forEach { ruleEntity ->
                                         database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
                                     }
                                 }
-                                // Update UI
                                 blockingRules = blockingRules.map {
                                     if (it.phoneNumber == toggleRule.phoneNumber) it.copy(isEnabled = enabled) else it
                                 }
@@ -348,6 +371,19 @@ fun HomeScreen(
         )
     }
 
+    if (showAddGroupDialog) {
+        AddGroupDialog(
+            context = context,
+            database = database,
+            onDismiss = { showAddGroupDialog = false },
+            onSave = { newRules ->
+                blockingRules = blockingRules + newRules
+                usedSlots += newRules.size
+                showAddGroupDialog = false
+            }
+        )
+    }
+
     if (editingRule != null) {
         AddBlockDialog(
             context = context,
@@ -355,7 +391,6 @@ fun HomeScreen(
             editingRule = editingRule,
             onDismiss = { editingRule = null },
             onSave = { rule ->
-                // Update the rule in the list
                 blockingRules = blockingRules.map { if (it.phoneNumber == rule.phoneNumber) rule else it }
                 editingRule = null
             }
@@ -382,23 +417,14 @@ fun HomeScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddBlockDialog(
+fun AddGroupDialog(
     context: Context,
     database: BlockingRuleDatabase,
-    editingRule: BlockingRule? = null,
     onDismiss: () -> Unit,
-    onSave: (BlockingRule) -> Unit
+    onSave: (List<BlockingRule>) -> Unit
 ) {
-    // Store multiple contacts
     var selectedContacts by remember { mutableStateOf(listOf<ContactInfo>()) }
-    var showContactSelection by remember { mutableStateOf(false) }
-
-    // If editing, load the existing contact
-    LaunchedEffect(editingRule) {
-        if (editingRule != null) {
-            selectedContacts = listOf(ContactInfo(editingRule.contactName, editingRule.phoneNumber))
-        }
-    }
+    var groupName by remember { mutableStateOf("") }
 
     val contactPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickContact()
@@ -406,7 +432,6 @@ fun AddBlockDialog(
         if (contactUri != null) {
             val contactInfo = getContactFromUri(context, contactUri)
             if (contactInfo != null) {
-                // Add to list if not already there
                 if (!selectedContacts.any { it.phoneNumber == contactInfo.phoneNumber }) {
                     selectedContacts = selectedContacts + contactInfo
                 }
@@ -420,10 +445,295 @@ fun AddBlockDialog(
         if (isGranted) contactPickerLauncher.launch(null)
     }
 
-    // Initialize days state from editing rule if exists
+    val daysState = remember {
+        mutableStateListOf(
+            DayBlockingState("Mon", false, false),
+            DayBlockingState("Tue", false, false),
+            DayBlockingState("Wed", false, false),
+            DayBlockingState("Thu", false, false),
+            DayBlockingState("Fri", false, false),
+            DayBlockingState("Sat", false, false),
+            DayBlockingState("Sun", false, false)
+        )
+    }
+
+    val dayTimes = remember {
+        mutableStateMapOf(
+            "Mon" to Pair("22:00", "07:00"),
+            "Tue" to Pair("22:00", "07:00"),
+            "Wed" to Pair("22:00", "07:00"),
+            "Thu" to Pair("22:00", "07:00"),
+            "Fri" to Pair("22:00", "07:00"),
+            "Sat" to Pair("22:00", "07:00"),
+            "Sun" to Pair("22:00", "07:00")
+        )
+    }
+
+    var emergencyBypass by remember { mutableStateOf(true) }
+    var retryWindow by remember { mutableStateOf(5) }
+    var hideNotifications by remember { mutableStateOf(true) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 600.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("New Group Block", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
+                }
+
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Text(
+                        text = "Select multiple contacts to block together during specific days or times.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Group Name (Optional)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = groupName,
+                        onValueChange = { groupName = it },
+                        placeholder = { Text("e.g., Work Colleagues") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Contacts (${selectedContacts.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (selectedContacts.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                selectedContacts.forEach { contact ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(contact.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                            Text(contact.phoneNumber, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        IconButton(onClick = {
+                                            selectedContacts = selectedContacts.filter { it.phoneNumber != contact.phoneNumber }
+                                        }) {
+                                            Text("❌")
+                                        }
+                                    }
+                                    if (contact != selectedContacts.last()) {
+                                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                                contactPickerLauncher.launch(null)
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add Contact to Group")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Per-day blocking", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    daysState.forEachIndexed { index, day ->
+                        val times = dayTimes[day.name] ?: Pair("22:00", "07:00")
+                        DayBlockingRow(
+                            day = day,
+                            onEnableChange = {
+                                HapticFeedback.performClick(context)
+                                daysState[index] = day.copy(enabled = it)
+                            },
+                            onAllDayChange = {
+                                HapticFeedback.performClick(context)
+                                daysState[index] = day.copy(allDay = it)
+                            },
+                            startTime = times.first,
+                            endTime = times.second,
+                            onStartTimeChange = { dayTimes[day.name] = times.copy(first = it) },
+                            onEndTimeChange = { dayTimes[day.name] = times.copy(second = it) },
+                            context = context
+                        )
+                        if (index < daysState.size - 1) Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Emergency bypass", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("If caller retries within window, allow.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = emergencyBypass, onCheckedChange = {
+                            HapticFeedback.performClick(context)
+                            emergencyBypass = it
+                        })
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Retry window (minutes)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(value = retryWindow.toString(), onValueChange = { retryWindow = it.toIntOrNull() ?: 5 }, modifier = Modifier.fillMaxWidth(), enabled = emergencyBypass)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Hide notifications", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("No ring/notifications during block.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = hideNotifications, onCheckedChange = {
+                            HapticFeedback.performClick(context)
+                            hideNotifications = it
+                        })
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = {
+                            if (selectedContacts.isEmpty()) {
+                                return@Button
+                            }
+
+                            kotlinx.coroutines.runBlocking {
+                                val allNewRules = mutableListOf<BlockingRule>()
+
+                                selectedContacts.forEach { contact ->
+                                    daysState.forEachIndexed { index, day ->
+                                        if (day.enabled) {
+                                            val times = dayTimes[day.name] ?: Pair("22:00", "07:00")
+                                            val startTime = if (day.allDay) "00:00" else times.first
+                                            val endTime = if (day.allDay) "23:59" else times.second
+
+                                            val ruleId = "${System.currentTimeMillis()}_${contact.phoneNumber}_${index}".hashCode()
+
+                                            val rule = BlockingRule(
+                                                id = ruleId,
+                                                contactName = contact.name,
+                                                phoneNumber = contact.phoneNumber,
+                                                startTime = startTime,
+                                                endTime = endTime,
+                                                daysOfWeek = listOf(index + 1),
+                                                allowEmergency = emergencyBypass,
+                                                isEnabled = true
+                                            )
+
+                                            database.blockingRuleDao().insert(
+                                                BlockingRuleEntity(
+                                                    id = rule.id,
+                                                    contactName = rule.contactName,
+                                                    phoneNumber = rule.phoneNumber,
+                                                    startTime = rule.startTime,
+                                                    endTime = rule.endTime,
+                                                    daysOfWeek = (index + 1).toString(),
+                                                    allowEmergency = rule.allowEmergency,
+                                                    retryWindow = retryWindow,
+                                                    isEnabled = rule.isEnabled,
+                                                    createdAt = System.currentTimeMillis()
+                                                )
+                                            )
+
+                                            allNewRules.add(rule)
+                                        }
+                                    }
+                                }
+
+                                val consolidatedRules = selectedContacts.mapNotNull { contact ->
+                                    val contactRules = allNewRules.filter { it.phoneNumber == contact.phoneNumber }
+                                    if (contactRules.isNotEmpty()) {
+                                        val firstRule = contactRules.first()
+                                        BlockingRule(
+                                            id = firstRule.id,
+                                            contactName = contact.name,
+                                            phoneNumber = firstRule.phoneNumber,
+                                            startTime = firstRule.startTime,
+                                            endTime = firstRule.endTime,
+                                            daysOfWeek = contactRules.map { it.daysOfWeek.first() },
+                                            allowEmergency = firstRule.allowEmergency,
+                                            isEnabled = true
+                                        )
+                                    } else null
+                                }
+
+                                onSave(consolidatedRules)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Save Group") }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddBlockDialog(
+    context: Context,
+    database: BlockingRuleDatabase,
+    editingRule: BlockingRule? = null,
+    onDismiss: () -> Unit,
+    onSave: (BlockingRule) -> Unit
+) {
+    var selectedContacts by remember { mutableStateOf(listOf<ContactInfo>()) }
+
+    LaunchedEffect(editingRule) {
+        if (editingRule != null) {
+            selectedContacts = listOf(ContactInfo(editingRule.contactName, editingRule.phoneNumber))
+        }
+    }
+
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickContact()
+    ) { contactUri ->
+        if (contactUri != null) {
+            val contactInfo = getContactFromUri(context, contactUri)
+            if (contactInfo != null) {
+                if (!selectedContacts.any { it.phoneNumber == contactInfo.phoneNumber }) {
+                    selectedContacts = selectedContacts + contactInfo
+                }
+            }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) contactPickerLauncher.launch(null)
+    }
+
     val daysState = remember {
         if (editingRule != null) {
-            // Load all rules for this contact from database to get per-day settings
             val allRulesForContact = runBlocking {
                 database.blockingRuleDao().getRuleByPhoneNumber(editingRule.phoneNumber)
             }
@@ -452,7 +762,6 @@ fun AddBlockDialog(
 
     val dayTimes = remember {
         if (editingRule != null) {
-            // Load actual times for each day from database
             val allRulesForContact = runBlocking {
                 database.blockingRuleDao().getRuleByPhoneNumber(editingRule.phoneNumber)
             }
@@ -526,7 +835,6 @@ fun AddBlockDialog(
                         )
                     }
 
-
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Per-day blocking", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -588,18 +896,15 @@ fun AddBlockDialog(
                     Button(
                         onClick = {
                             if (selectedContacts.isEmpty()) {
-                                // Show error: at least one contact required
                                 return@Button
                             }
 
                             kotlinx.coroutines.runBlocking {
-                                // If editing, delete old rules first
                                 if (editingRule != null) {
                                     val oldRules = database.blockingRuleDao().getRuleByPhoneNumber(editingRule.phoneNumber)
                                     oldRules.forEach { database.blockingRuleDao().delete(it) }
                                 }
 
-                                // Save rules for ALL selected contacts
                                 val allNewRules = mutableListOf<BlockingRule>()
 
                                 selectedContacts.forEach { contact ->
@@ -642,7 +947,6 @@ fun AddBlockDialog(
                                     }
                                 }
 
-                                // For UI display, create a consolidated rule for the first contact
                                 if (allNewRules.isNotEmpty()) {
                                     val firstContactRules = allNewRules.filter { it.phoneNumber == selectedContacts.first().phoneNumber }
                                     if (firstContactRules.isNotEmpty()) {
@@ -825,7 +1129,6 @@ fun BlockingRuleCard(rule: BlockingRule, onEdit: (BlockingRule) -> Unit, onDelet
                     }
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Show if this is "All day"
                     if (rule.startTime == "00:00" && rule.endTime == "23:59") {
                         Text("⏰ All day", style = MaterialTheme.typography.bodyMedium)
                     } else {
@@ -848,7 +1151,6 @@ fun BlockingRuleCard(rule: BlockingRule, onEdit: (BlockingRule) -> Unit, onDelet
                     }
                     Button(
                         onClick = {
-                            // Delete all rules for this contact
                             kotlinx.coroutines.runBlocking {
                                 val rulesToDelete = database.blockingRuleDao().getRuleByPhoneNumber(rule.phoneNumber)
                                 rulesToDelete.forEach { ruleEntity ->
