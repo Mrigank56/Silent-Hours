@@ -135,11 +135,21 @@ fun HomeScreen(
                     )
                 },
                 actions = {
-                    Switch(
-                        checked = isDarkMode,
-                        onCheckedChange = { onThemeToggle() },
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(end = 8.dp)
-                    )
+                    ) {
+                        Switch(
+                            checked = isDarkMode,
+                            onCheckedChange = { onThemeToggle() },
+                            thumbContent = {
+                                Text(
+                                    if (isDarkMode) "🌙" else "☀️",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
