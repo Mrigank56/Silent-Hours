@@ -1,58 +1,57 @@
-package com.example.silenthours.ui.theme
+package com.example.callblocker.ui.theme
 
-import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import com.example.silenthours.ui.theme.modernTypography
 
+// Pitch black background, vibrant blue accents
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = Color(0xFF2196F3),       // Blue highlight
+    onPrimary = Color.White,
+    secondary = Color(0xFF42A5F5),
+    onSecondary = Color.White,
+    tertiary = Color(0xFF90CAF9),
+
+    background = Color(0xFF121212),    // Deep gray-black background
+    onBackground = Color(0xFFE0E0E0),  // Light text for readability
+
+    surface = Color(0xFF1E1E1E),       // Slightly lighter than background for cards
+    onSurface = Color(0xFFECECEC),
+
+    surfaceVariant = Color(0xFF2A2A2A), // Medium gray for elevated cards
+    onSurfaceVariant = Color(0xFFE0E0E0),
+
+    error = Color(0xFFFF5350)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
+    primary = Color(0xFF1976D2),
     onPrimary = Color.White,
+    secondary = Color(0xFF2196F3),
     onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    tertiary = Color(0xFF64B5F6),
+    background = Color(0xFFFFFFFF),
+    onBackground = Color(0xFF000000),
+    surface = Color(0xFFF5F5F5),
+    onSurface = Color(0xFF000000),
+    surfaceVariant = Color(0xFFE3F2FD),
+    onSurfaceVariant = Color(0xFF37474F),
+    error = Color(0xFFD32F2F)
 )
 
 @Composable
 fun SilentHoursTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    val colors = if (darkTheme) DarkColorScheme else LightColorScheme
 
     MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
+        colorScheme = colors,
+        typography = modernTypography,
+        shapes = modernShapes,
         content = content
     )
 }

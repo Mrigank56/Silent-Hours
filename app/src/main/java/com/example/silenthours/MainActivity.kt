@@ -16,10 +16,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import com.example.callblocker.ui.theme.SilentHoursTheme
 import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
@@ -44,9 +47,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             var isDarkMode by remember { mutableStateOf(true) }
 
-            MaterialTheme(
-                colorScheme = if (isDarkMode) darkColorScheme() else lightColorScheme()
-            ) {
+            SilentHoursTheme(darkTheme = isDarkMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -76,9 +77,9 @@ fun HomeScreen(
     billingManager: BillingManager,
     activity: Activity
 ) {
-    val isPremium by billingManager.isPremiumFlow.collectAsState(initial = true) // Set to true for development
+    val isPremium by billingManager.isPremiumFlow.collectAsState(initial = true)
     var usedSlots by remember { mutableStateOf(0) }
-    val freeSlots = 999 // Unlimited for development
+    val freeSlots = 999
     var showAddDialog by remember { mutableStateOf(false) }
     var showAddGroupDialog by remember { mutableStateOf(false) }
     var showUpgradeDialog by remember { mutableStateOf(false) }
@@ -125,234 +126,157 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Call Guard") },
-                actions = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Switch(
-                            checked = isDarkMode,
-                            onCheckedChange = { onThemeToggle() },
-                            thumbContent = {
-                                Text(
-                                    if (isDarkMode) "🌙" else "☀️",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                        )
-                    }
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        "Silent Hours",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                actions = {
+                    Switch(
+                        checked = isDarkMode,
+                        onCheckedChange = { onThemeToggle() },
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
+        },
+        floatingActionButton = {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                FloatingActionButton(
+                    onClick = { showAddGroupDialog = true },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Text("👥", style = MaterialTheme.typography.titleLarge)
+                }
+                FloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(64.dp)
+                ) {
+                    Icon(Icons.Filled.Add, "Add Contact", modifier = Modifier.size(28.dp))
+                }
+            }
         }
     ) { paddingValues ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(vertical = 16.dp)
         ) {
             if (!hasCallScreeningRole && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "⚠️ Call Screening Not Enabled",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
+                item {
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "This app needs Call Screening permission to block calls. Tap the button below to enable it.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = {
-                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                                    val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
-                                    val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_CALL_SCREENING)
-                                    requestRoleLauncher.launch(intent)
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Text("Enable Call Screening")
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = if (isPremium) "Premium - Unlimited" else "$usedSlots/$freeSlots free slots",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Block a contact",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (!isPremium) {
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
                             Text(
-                                text = "${freeSlots - usedSlots} slots remaining",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                "⚠️ Permission Required",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
                             )
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                if (!isPremium && usedSlots >= freeSlots) {
-                                    showUpgradeDialog = true
-                                } else {
-                                    showAddDialog = true
-                                }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Enable Call Screening to block calls automatically.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            FilledTonalButton(
+                                onClick = {
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                                        val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
+                                        val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_CALL_SCREENING)
+                                        requestRoleLauncher.launch(intent)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                )
+                            ) {
+                                Text("Enable Now")
                             }
-                        ) {
-                            Text("Add")
-                        }
-                        Button(
-                            onClick = {
-                                if (!isPremium && usedSlots >= freeSlots) {
-                                    showUpgradeDialog = true
-                                } else {
-                                    showAddGroupDialog = true
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondary
-                            )
-                        ) {
-                            Text("Add Group")
                         }
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             if (blockingRules.isEmpty()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
+                item {
                     Column(
-                        modifier = Modifier.padding(24.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Create your first block to automatically silence calls from a contact during specific days or times.",
-                            style = MaterialTheme.typography.bodyMedium,
+                            "No blocking rules yet",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Create rules to block calls during specific times",
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    if (!isPremium && usedSlots >= freeSlots) {
-                                        showUpgradeDialog = true
-                                    } else {
-                                        showAddDialog = true
-                                    }
-                                }
-                            ) {
-                                Text("Add block")
-                            }
-                            Button(
-                                onClick = {
-                                    if (!isPremium && usedSlots >= freeSlots) {
-                                        showUpgradeDialog = true
-                                    } else {
-                                        showAddGroupDialog = true
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondary
-                                )
-                            ) {
-                                Text("Add group")
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-                Text("How it works", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("• Select a contact, then choose days or set an entire day/time window to silently block calls.")
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("• Emergency bypass lets repeat calls within the set window through, if enabled. Turn it off to block no matter what.")
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("• No ads. 3 slots free. ₹99 unlocks unlimited.")
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(blockingRules) { rule ->
-                        BlockingRuleCard(
-                            rule = rule,
-                            onEdit = { editRule ->
-                                editingRule = editRule
-                            },
-                            onDelete = { deleteRule ->
-                                blockingRules = blockingRules.filter { it.id != deleteRule.id }
-                                usedSlots = maxOf(0, usedSlots - 1)
-                            },
-                            onToggle = { toggleRule, enabled ->
-                                kotlinx.coroutines.runBlocking {
-                                    val rulesToUpdate = database.blockingRuleDao().getRuleByPhoneNumber(toggleRule.phoneNumber)
-                                    rulesToUpdate.forEach { ruleEntity ->
-                                        database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
-                                    }
-                                }
-                                blockingRules = blockingRules.map {
-                                    if (it.phoneNumber == toggleRule.phoneNumber) it.copy(isEnabled = enabled) else it
-                                }
-                            }
+                        Spacer(modifier = Modifier.height(32.dp))
+                        Text(
+                            "Tap + to add a contact",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
+                }
+            } else {
+                item {
+                    Text(
+                        "Active Rules",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                items(blockingRules) { rule ->
+                    BlockingRuleCard(
+                        rule = rule,
+                        onEdit = { editRule -> editingRule = editRule },
+                        onDelete = { deleteRule ->
+                            blockingRules = blockingRules.filter { it.id != deleteRule.id }
+                            usedSlots = maxOf(0, usedSlots - 1)
+                        },
+                        onToggle = { toggleRule, enabled ->
+                            kotlinx.coroutines.runBlocking {
+                                val rulesToUpdate = database.blockingRuleDao().getRuleByPhoneNumber(toggleRule.phoneNumber)
+                                rulesToUpdate.forEach { ruleEntity ->
+                                    database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
+                                }
+                            }
+                            blockingRules = blockingRules.map {
+                                if (it.phoneNumber == toggleRule.phoneNumber) it.copy(isEnabled = enabled) else it
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -424,7 +348,6 @@ fun AddGroupDialog(
     onSave: (List<BlockingRule>) -> Unit
 ) {
     var selectedContacts by remember { mutableStateOf(listOf<ContactInfo>()) }
-    var groupName by remember { mutableStateOf("") }
 
     val contactPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickContact()
@@ -471,52 +394,44 @@ fun AddGroupDialog(
 
     var emergencyBypass by remember { mutableStateOf(true) }
     var retryWindow by remember { mutableStateOf(5) }
-    var hideNotifications by remember { mutableStateOf(true) }
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
+        ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 600.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                .fillMaxHeight(0.9f),
+            shape = RoundedCornerShape(28.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("New Group Block", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
+                    Text(
+                        "New Group",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, "Close")
+                    }
                 }
 
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    Text(
-                        text = "Select multiple contacts to block together during specific days or times.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Group Name (Optional)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = groupName,
-                        onValueChange = { groupName = it },
-                        placeholder = { Text("e.g., Work Colleagues") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Contacts (${selectedContacts.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
-
+                Column(modifier = Modifier.padding(horizontal = 24.dp)) {
                     if (selectedContacts.isNotEmpty()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    "${selectedContacts.size} Contacts",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
                                 selectedContacts.forEach { contact ->
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -524,13 +439,21 @@ fun AddGroupDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(contact.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                            Text(contact.phoneNumber, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                contact.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Text(
+                                                contact.phoneNumber,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
                                         IconButton(onClick = {
                                             selectedContacts = selectedContacts.filter { it.phoneNumber != contact.phoneNumber }
                                         }) {
-                                            Text("❌")
+                                            Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.error)
                                         }
                                     }
                                     if (contact != selectedContacts.last()) {
@@ -539,7 +462,7 @@ fun AddGroupDialog(
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
 
                     OutlinedButton(
@@ -552,14 +475,18 @@ fun AddGroupDialog(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
+                        Icon(Icons.Filled.Person, null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Add Contact to Group")
+                        Text("Add Contact")
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Per-day blocking", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        "Schedule",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     daysState.forEachIndexed { index, day ->
                         val times = dayTimes[day.name] ?: Pair("22:00", "07:00")
@@ -582,44 +509,40 @@ fun AddGroupDialog(
                         if (index < daysState.size - 1) Spacer(modifier = Modifier.height(8.dp))
                     }
 
+                    Spacer(modifier = Modifier.height(24.dp))
+                    HorizontalDivider()
                     Spacer(modifier = Modifier.height(16.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Emergency bypass", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            Text("If caller retries within window, allow.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "Emergency Bypass",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "Allow if retried within ${retryWindow} min",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        Switch(checked = emergencyBypass, onCheckedChange = {
-                            HapticFeedback.performClick(context)
-                            emergencyBypass = it
-                        })
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Retry window (minutes)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    OutlinedTextField(value = retryWindow.toString(), onValueChange = { retryWindow = it.toIntOrNull() ?: 5 }, modifier = Modifier.fillMaxWidth(), enabled = emergencyBypass)
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Hide notifications", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            Text("No ring/notifications during block.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Switch(checked = hideNotifications, onCheckedChange = {
-                            HapticFeedback.performClick(context)
-                            hideNotifications = it
-                        })
+                        Switch(
+                            checked = emergencyBypass,
+                            onCheckedChange = {
+                                HapticFeedback.performClick(context)
+                                emergencyBypass = it
+                            }
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
                         onClick = {
-                            if (selectedContacts.isEmpty()) {
-                                return@Button
-                            }
+                            if (selectedContacts.isEmpty()) return@Button
 
                             kotlinx.coroutines.runBlocking {
                                 val allNewRules = mutableListOf<BlockingRule>()
@@ -684,12 +607,20 @@ fun AddGroupDialog(
                                 onSave(consolidatedRules)
                             }
                         },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Save Group") }
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = selectedContacts.isNotEmpty() && daysState.any { it.enabled }
+                    ) {
+                        Text("Save Group")
+                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
-                    Spacer(modifier = Modifier.height(16.dp))
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
             }
         }
@@ -790,35 +721,33 @@ fun AddBlockDialog(
 
     var emergencyBypass by remember { mutableStateOf(editingRule?.allowEmergency ?: true) }
     var retryWindow by remember { mutableStateOf(5) }
-    var hideNotifications by remember { mutableStateOf(true) }
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
+        ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 600.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                .fillMaxHeight(0.9f),
+            shape = RoundedCornerShape(28.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(if (editingRule != null) "Edit block" else "New block", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
+                    Text(
+                        if (editingRule != null) "Edit Block" else "New Block",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, "Close")
+                    }
                 }
 
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    Text(
-                        text = "Select a contact to block during specific days or times.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Contact", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
+                Column(modifier = Modifier.padding(horizontal = 24.dp)) {
                     OutlinedButton(
                         onClick = {
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
@@ -829,15 +758,21 @@ fun AddBlockDialog(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                        Icon(Icons.Filled.Person, null)
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            if (selectedContacts.isEmpty()) "Select contact"
-                            else selectedContacts.joinToString { it.name }
+                            if (selectedContacts.isEmpty()) "Select Contact"
+                            else selectedContacts.first().name
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Per-day blocking", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        "Schedule",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     daysState.forEachIndexed { index, day ->
                         val times = dayTimes[day.name] ?: Pair("22:00", "07:00")
@@ -860,44 +795,40 @@ fun AddBlockDialog(
                         if (index < daysState.size - 1) Spacer(modifier = Modifier.height(8.dp))
                     }
 
+                    Spacer(modifier = Modifier.height(24.dp))
+                    HorizontalDivider()
                     Spacer(modifier = Modifier.height(16.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Emergency bypass", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            Text("If caller retries within window, allow.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "Emergency Bypass",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "Allow if retried within ${retryWindow} min",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        Switch(checked = emergencyBypass, onCheckedChange = {
-                            HapticFeedback.performClick(context)
-                            emergencyBypass = it
-                        })
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Retry window (minutes)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    OutlinedTextField(value = retryWindow.toString(), onValueChange = { retryWindow = it.toIntOrNull() ?: 5 }, modifier = Modifier.fillMaxWidth(), enabled = emergencyBypass)
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Hide notifications", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            Text("No ring/notifications during block.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Switch(checked = hideNotifications, onCheckedChange = {
-                            HapticFeedback.performClick(context)
-                            hideNotifications = it
-                        })
+                        Switch(
+                            checked = emergencyBypass,
+                            onCheckedChange = {
+                                HapticFeedback.performClick(context)
+                                emergencyBypass = it
+                            }
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
                         onClick = {
-                            if (selectedContacts.isEmpty()) {
-                                return@Button
-                            }
+                            if (selectedContacts.isEmpty()) return@Button
 
                             kotlinx.coroutines.runBlocking {
                                 if (editingRule != null) {
@@ -953,7 +884,7 @@ fun AddBlockDialog(
                                         val firstRule = firstContactRules.first()
                                         val consolidatedRule = BlockingRule(
                                             id = firstRule.id,
-                                            contactName = if (selectedContacts.size > 1) "${selectedContacts.first().name} +${selectedContacts.size - 1}" else selectedContacts.first().name,
+                                            contactName = selectedContacts.first().name,
                                             phoneNumber = firstRule.phoneNumber,
                                             startTime = firstRule.startTime,
                                             endTime = firstRule.endTime,
@@ -966,12 +897,20 @@ fun AddBlockDialog(
                                 }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text(if (editingRule != null) "Update" else "Save") }
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = selectedContacts.isNotEmpty() && daysState.any { it.enabled }
+                    ) {
+                        Text(if (editingRule != null) "Update" else "Save")
+                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
-                    Spacer(modifier = Modifier.height(16.dp))
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
             }
         }
@@ -993,17 +932,33 @@ fun TimePickerDialog(
     var minute by remember { mutableStateOf(initialMinute.toFloat()) }
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth(0.9f).padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp)
         ) {
-            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Select Time", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "Select Time",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(modifier = Modifier.height(24.dp))
-                Text("${hour.toInt().toString().padStart(2, '0')}:${minute.toInt().toString().padStart(2, '0')}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    "${hour.toInt().toString().padStart(2, '0')}:${minute.toInt().toString().padStart(2, '0')}",
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(32.dp))
 
-                Text("Hour: ${hour.toInt().toString().padStart(2, '0')}", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Hour",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Slider(
                     value = hour,
                     onValueChange = {
@@ -1017,7 +972,11 @@ fun TimePickerDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text("Minute: ${minute.toInt().toString().padStart(2, '0')}", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Minute",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Slider(
                     value = minute,
                     onValueChange = {
@@ -1031,8 +990,16 @@ fun TimePickerDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Cancel")
+                    }
                     Button(
                         onClick = {
                             val timeString = "${hour.toInt().toString().padStart(2, '0')}:${minute.toInt().toString().padStart(2, '0')}"
@@ -1040,7 +1007,9 @@ fun TimePickerDialog(
                             context?.let { ctx -> HapticFeedback.performHeavyClick(ctx) }
                         },
                         modifier = Modifier.weight(1f)
-                    ) { Text("OK") }
+                    ) {
+                        Text("OK")
+                    }
                 }
             }
         }
@@ -1061,30 +1030,73 @@ fun DayBlockingRow(
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(day.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.width(50.dp))
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    day.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.width(60.dp)
+                )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Enable", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 8.dp))
-                    Switch(checked = day.enabled, onCheckedChange = onEnableChange)
-                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "On",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Switch(
+                            checked = day.enabled,
+                            onCheckedChange = onEnableChange
+                        )
+                    }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("All day", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 8.dp))
-                    Switch(checked = day.allDay, onCheckedChange = onAllDayChange, enabled = day.enabled)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "All Day",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Switch(
+                            checked = day.allDay,
+                            onCheckedChange = onAllDayChange,
+                            enabled = day.enabled
+                        )
+                    }
                 }
             }
 
             if (day.enabled && !day.allDay) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showStartTimePicker = true }, modifier = Modifier.weight(1f)) {
-                        Text("From: $startTime")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { showStartTimePicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(startTime, style = MaterialTheme.typography.labelLarge)
                     }
-                    OutlinedButton(onClick = { showEndTimePicker = true }, modifier = Modifier.weight(1f)) {
-                        Text("To: $endTime")
+                    Text("→", modifier = Modifier.align(Alignment.CenterVertically))
+                    OutlinedButton(
+                        onClick = { showEndTimePicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(endTime, style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -1092,64 +1104,113 @@ fun DayBlockingRow(
     }
 
     if (showStartTimePicker && context != null) {
-        TimePickerDialog(initialTime = startTime, onTimeSelected = { newTime -> onStartTimeChange(newTime); showStartTimePicker = false }, onDismiss = { showStartTimePicker = false }, context = context)
+        TimePickerDialog(
+            initialTime = startTime,
+            onTimeSelected = { newTime ->
+                onStartTimeChange(newTime)
+                showStartTimePicker = false
+            },
+            onDismiss = { showStartTimePicker = false },
+            context = context
+        )
     }
 
     if (showEndTimePicker && context != null) {
-        TimePickerDialog(initialTime = endTime, onTimeSelected = { newTime -> onEndTimeChange(newTime); showEndTimePicker = false }, onDismiss = { showEndTimePicker = false }, context = context)
+        TimePickerDialog(
+            initialTime = endTime,
+            onTimeSelected = { newTime ->
+                onEndTimeChange(newTime)
+                showEndTimePicker = false
+            },
+            onDismiss = { showEndTimePicker = false },
+            context = context
+        )
     }
 }
 
 @Composable
-fun BlockingRuleCard(rule: BlockingRule, onEdit: (BlockingRule) -> Unit, onDelete: (BlockingRule) -> Unit, onToggle: (BlockingRule, Boolean) -> Unit) {
+fun BlockingRuleCard(
+    rule: BlockingRule,
+    onEdit: (BlockingRule) -> Unit,
+    onDelete: (BlockingRule) -> Unit,
+    onToggle: (BlockingRule, Boolean) -> Unit
+) {
     val context = LocalContext.current
     val database = remember { BlockingRuleDatabase.getDatabase(context) }
 
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(rule.contactName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Switch(
-                            checked = rule.isEnabled,
-                            onCheckedChange = { enabled ->
-                                HapticFeedback.performClick(context)
-                                onToggle(rule, enabled)
-                            }
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        rule.contactName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Switch(
+                        checked = rule.isEnabled,
+                        onCheckedChange = { enabled ->
+                            HapticFeedback.performClick(context)
+                            onToggle(rule, enabled)
+                        }
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (rule.startTime == "00:00" && rule.endTime == "23:59") {
+                        AssistChip(
+                            onClick = { },
+                            label = { Text("All Day") },
+                            leadingIcon = { Text("⏰") }
+                        )
+                    } else {
+                        AssistChip(
+                            onClick = { },
+                            label = { Text("${rule.startTime} - ${rule.endTime}") },
+                            leadingIcon = { Text("⏰") }
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
 
-                    if (rule.startTime == "00:00" && rule.endTime == "23:59") {
-                        Text("⏰ All day", style = MaterialTheme.typography.bodyMedium)
-                    } else {
-                        Text("⏰ ${rule.startTime} - ${rule.endTime}", style = MaterialTheme.typography.bodyMedium)
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("📅 ${formatDaysOfWeek(rule.daysOfWeek)}", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(if (rule.allowEmergency) "🚨 Emergency bypass enabled" else "🚫 No emergency bypass", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AssistChip(
+                        onClick = { },
+                        label = { Text(formatDaysOfWeek(rule.daysOfWeek)) },
+                        leadingIcon = { Text("📅") }
+                    )
                 }
+
+                if (rule.allowEmergency) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Emergency bypass enabled",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
+                    FilledTonalButton(
                         onClick = { onEdit(rule) },
-                        modifier = Modifier.size(40.dp),
-                        shape = MaterialTheme.shapes.small,
-                        contentPadding = PaddingValues(0.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                     ) {
-                        Text("✏️", style = MaterialTheme.typography.bodyMedium)
+                        Text("Edit")
                     }
-                    Button(
+                    OutlinedButton(
                         onClick = {
                             kotlinx.coroutines.runBlocking {
                                 val rulesToDelete = database.blockingRuleDao().getRuleByPhoneNumber(rule.phoneNumber)
@@ -1159,12 +1220,12 @@ fun BlockingRuleCard(rule: BlockingRule, onEdit: (BlockingRule) -> Unit, onDelet
                             }
                             onDelete(rule)
                         },
-                        modifier = Modifier.size(40.dp),
-                        shape = MaterialTheme.shapes.small,
-                        contentPadding = PaddingValues(0.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
                     ) {
-                        Text("🗑️", style = MaterialTheme.typography.bodyMedium)
+                        Text("Delete")
                     }
                 }
             }
