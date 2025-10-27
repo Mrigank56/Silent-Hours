@@ -298,8 +298,8 @@ fun HomeScreen(
                             },
                             onToggle = { groupId, enabled ->
                                 kotlinx.coroutines.runBlocking {
-                                    val rulesToUpdate = database.blockingRuleDao().getRulesByGroupId(groupId)
-                                    rulesToUpdate.forEach { ruleEntity ->
+                                    val rulesToUpdate = groupId?.let { database.blockingRuleDao().getRulesByGroupId(it) }
+                                    rulesToUpdate?.forEach { ruleEntity ->
                                         database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
                                     }
                                 }
