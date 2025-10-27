@@ -988,7 +988,9 @@ fun AddBlockDialog(
                                                 endTime = endTime,
                                                 daysOfWeek = listOf(index + 1),
                                                 allowEmergency = emergencyBypass,
-                                                isEnabled = true
+                                                isEnabled = true,
+                                                null,
+                                                null
                                             )
 
                                             database.blockingRuleDao().insert(
@@ -1023,7 +1025,9 @@ fun AddBlockDialog(
                                             endTime = firstRule.endTime,
                                             daysOfWeek = firstContactRules.map { it.daysOfWeek.first() },
                                             allowEmergency = firstRule.allowEmergency,
-                                            isEnabled = true
+                                            isEnabled = true,
+                                            null,
+                                            null
                                         )
                                         onSave(consolidatedRule)
                                     }
