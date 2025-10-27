@@ -11,6 +11,8 @@ import androidx.room.Insert
 import androidx.room.Update
 import androidx.room.Delete
 import androidx.room.Query
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(tableName = "blocking_rules")
 data class BlockingRuleEntity(
@@ -23,7 +25,9 @@ data class BlockingRuleEntity(
     val allowEmergency: Boolean,
     val retryWindow: Int,
     val isEnabled: Boolean,
-    val createdAt: Long
+    val createdAt: Long,
+    val groupName: String? = null,      // ADD THIS LINE
+    val groupId: String? = null
 )
 
 @Entity(tableName = "call_attempts")
@@ -53,6 +57,9 @@ interface BlockingRuleDao {
 
     @Query("SELECT * FROM blocking_rules")
     suspend fun getAllRules(): List<BlockingRuleEntity>
+
+    @Query("SELECT * FROM blocking_rules WHERE groupId = :groupId")
+    suspend fun getRulesByGroupId(groupId: String): List<BlockingRuleEntity>
 }
 
 @Dao
@@ -69,7 +76,7 @@ interface CallAttemptDao {
 
 @Database(
     entities = [BlockingRuleEntity::class, CallAttemptEntity::class],
-    version = 1
+    version = 2
 )
 abstract class BlockingRuleDatabase : RoomDatabase() {
     abstract fun blockingRuleDao(): BlockingRuleDao
@@ -79,13 +86,20 @@ abstract class BlockingRuleDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: BlockingRuleDatabase? = null
 
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE blocking_rules ADD COLUMN groupName TEXT")
+                database.execSQL("ALTER TABLE blocking_rules ADD COLUMN groupId TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): BlockingRuleDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     BlockingRuleDatabase::class.java,
                     "blocking_rules_database"
-                ).build()
+                ).addMigrations(MIGRATION_1_2).build()
                 INSTANCE = instance
                 instance
             }
