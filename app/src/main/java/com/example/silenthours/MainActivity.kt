@@ -1224,91 +1224,97 @@ fun BlockingRuleCard(
                 .fillMaxWidth()
                 .clickable { isExpanded = !isExpanded }
         ) {
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(20.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            if (isGroup && rule.groupName != null) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("👥", style = MaterialTheme.typography.titleMedium)
-                                    Spacer(modifier = Modifier.width(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                if (isGroup && rule.groupName != null) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("👥", style = MaterialTheme.typography.titleMedium)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            rule.groupName,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        rule.groupName,
+                                        rule.contactName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    Text(
+                                        rule.contactName,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    rule.contactName,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                            Switch(
+                                checked = rule.isEnabled,
+                                onCheckedChange = { enabled ->
+                                    HapticFeedback.performClick(context)
+                                    onToggle(rule, enabled)
+                                }
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (rule.startTime == "00:00" && rule.endTime == "23:59") {
+                                AssistChip(
+                                    onClick = { },
+                                    label = { Text("All Day") },
+                                    leadingIcon = { Text("⏰") }
                                 )
                             } else {
-                                Text(
-                                    rule.contactName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
+                                AssistChip(
+                                    onClick = { },
+                                    label = { Text("${rule.startTime} - ${rule.endTime}") },
+                                    leadingIcon = { Text("⏰") }
                                 )
                             }
-                        }
-                        Switch(
-                            checked = rule.isEnabled,
-                            onCheckedChange = { enabled ->
-                                HapticFeedback.performClick(context)
-                                onToggle(rule, enabled)
-                            }
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (rule.startTime == "00:00" && rule.endTime == "23:59") {
                             AssistChip(
                                 onClick = { },
-                                label = { Text("All Day") },
-                                leadingIcon = { Text("⏰") }
-                            )
-                        } else {
-                            AssistChip(
-                                onClick = { },
-                                label = { Text("${rule.startTime} - ${rule.endTime}") },
-                                leadingIcon = { Text("⏰") }
+                                label = { Text(formatDaysOfWeek(rule.daysOfWeek)) },
+                                leadingIcon = { Text("📅") }
                             )
                         }
 
-                        AssistChip(
-                            onClick = { },
-                            label = { Text(formatDaysOfWeek(rule.daysOfWeek)) },
-                            leadingIcon = { Text("📅") }
-                        )
-                    }
-
-                    if (rule.allowEmergency) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "Emergency bypass enabled",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (rule.allowEmergency) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Emergency bypass enabled",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
                     contentDescription = "Expand",
-                    modifier = Modifier.rotate(rotationAngle)
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .rotate(rotationAngle)
                 )
             }
         }
