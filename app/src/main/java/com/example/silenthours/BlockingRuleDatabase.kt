@@ -52,7 +52,7 @@ interface BlockingRuleDao {
     @Query("SELECT * FROM blocking_rules WHERE isEnabled = 1")
     suspend fun getAllActiveRules(): List<BlockingRuleEntity>
 
-    @Query("SELECT * FROM blocking_rules WHERE phoneNumber = :phoneNumber AND isEnabled = 1")
+    @Query("SELECT * FROM blocking_rules WHERE phoneNumber = :phoneNumber")
     suspend fun getRuleByPhoneNumber(phoneNumber: String): List<BlockingRuleEntity>
 
     @Query("SELECT * FROM blocking_rules")
@@ -60,6 +60,9 @@ interface BlockingRuleDao {
 
     @Query("SELECT * FROM blocking_rules WHERE groupId = :groupId")
     suspend fun getRulesByGroupId(groupId: String): List<BlockingRuleEntity>
+
+    @Query("UPDATE blocking_rules SET isEnabled = :isEnabled")
+    suspend fun updateAllRulesEnabled(isEnabled: Boolean)
 }
 
 @Dao

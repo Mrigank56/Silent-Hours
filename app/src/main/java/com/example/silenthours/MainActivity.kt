@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
@@ -12,6 +13,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,18 +25,23 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.example.callblocker.ui.theme.SilentHoursTheme
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+
+
 
 class MainActivity : ComponentActivity() {
     private lateinit var billingManager: BillingManager
@@ -83,9 +92,10 @@ fun HomeScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var showAddGroupDialog by remember { mutableStateOf(false) }
     var showUpgradeDialog by remember { mutableStateOf(false) }
-    var editingRule by remember { mutableStateOf<BlockingRule?>(null) }
     val context = LocalContext.current
     var blockingRules by remember { mutableStateOf(listOf<BlockingRule>()) }
+    var areAllRulesEnabled by remember { mutableStateOf(true) }
+
 
     val database = remember { BlockingRuleDatabase.getDatabase(context) }
 
@@ -107,53 +117,62 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        val rulesFromDb = database.blockingRuleDao().getAllRules()
+    fun refreshRules() {
+        runBlocking {
+            val rulesFromDb = database.blockingRuleDao().getAllRules()
 
-        // Separate individual rules and group rules
-        val individualRules = rulesFromDb.filter { it.groupId == null }
-        val groupRules = rulesFromDb.filter { it.groupId != null }
+            // Separate individual rules and group rules
+            val individualRules = rulesFromDb.filter { it.groupId == null }
+            val groupRules = rulesFromDb.filter { it.groupId != null }
 
-        // Process individual rules (one card per contact)
-        val individualBlockingRules = individualRules.groupBy { it.phoneNumber }.map { (phoneNumber, rules) ->
-            val first = rules.first()
-            BlockingRule(
-                id = first.id,
-                contactName = first.contactName,
-                phoneNumber = phoneNumber,
-                startTime = first.startTime,
-                endTime = first.endTime,
-                daysOfWeek = rules.map { it.daysOfWeek.toIntOrNull() ?: 0 }.distinct().sorted(),
-                allowEmergency = first.allowEmergency,
-                isEnabled = first.isEnabled,
-                groupName = null,
-                groupId = null
-            )
+            // Process individual rules (one card per contact)
+            val individualBlockingRules = individualRules.groupBy { it.phoneNumber }.map { (phoneNumber, rules) ->
+                val first = rules.first()
+                BlockingRule(
+                    id = first.id,
+                    contactName = first.contactName,
+                    phoneNumber = phoneNumber,
+                    startTime = first.startTime,
+                    endTime = first.endTime,
+                    daysOfWeek = rules.map { it.daysOfWeek.toIntOrNull() ?: 0 }.distinct().sorted(),
+                    allowEmergency = first.allowEmergency,
+                    isEnabled = first.isEnabled,
+                    groupName = null,
+                    groupId = null
+                )
+            }
+
+            // Process group rules (one card per group)
+            val groupBlockingRules = groupRules.groupBy { it.groupId }.map { (groupId, rules) ->
+                val first = rules.first()
+                val allContacts = rules.map { it.contactName }.distinct()
+                val allPhoneNumbers = rules.map { it.phoneNumber }.distinct()
+
+                BlockingRule(
+                    id = first.id,
+                    contactName = allContacts.joinToString(", "),
+                    phoneNumber = allPhoneNumbers.joinToString(","),
+                    startTime = first.startTime,
+                    endTime = first.endTime,
+                    daysOfWeek = rules.map { it.daysOfWeek.toIntOrNull() ?: 0 }.distinct().sorted(),
+                    allowEmergency = first.allowEmergency,
+                    isEnabled = first.isEnabled,
+                    groupName = first.groupName,
+                    groupId = groupId
+                )
+            }
+
+            blockingRules = individualBlockingRules + groupBlockingRules
+            usedSlots = blockingRules.count { it.isEnabled }
+            areAllRulesEnabled = blockingRules.all { it.isEnabled }
         }
-
-        // Process group rules (one card per group)
-        val groupBlockingRules = groupRules.groupBy { it.groupId }.map { (groupId, rules) ->
-            val first = rules.first()
-            val allContacts = rules.map { it.contactName }.distinct()
-            val allPhoneNumbers = rules.map { it.phoneNumber }.distinct()
-
-            BlockingRule(
-                id = first.id,
-                contactName = allContacts.joinToString(", "),
-                phoneNumber = allPhoneNumbers.joinToString(","),
-                startTime = first.startTime,
-                endTime = first.endTime,
-                daysOfWeek = rules.map { it.daysOfWeek.toIntOrNull() ?: 0 }.distinct().sorted(),
-                allowEmergency = first.allowEmergency,
-                isEnabled = first.isEnabled,
-                groupName = first.groupName,
-                groupId = groupId
-            )
-        }
-
-        blockingRules = individualBlockingRules + groupBlockingRules
-        usedSlots = blockingRules.count { it.isEnabled }
     }
+
+    LaunchedEffect(Unit) {
+        refreshRules()
+    }
+    val coroutineScope = rememberCoroutineScope()
+
 
     Scaffold(
         topBar = {
@@ -165,10 +184,10 @@ fun HomeScreen(
                         fontWeight = FontWeight.Bold
                     )
                 },
-                actions = {
+                navigationIcon = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 8.dp)
+                        modifier = Modifier.padding(start = 8.dp)
                     ) {
                         Switch(
                             checked = isDarkMode,
@@ -179,6 +198,35 @@ fun HomeScreen(
                                     style = MaterialTheme.typography.labelSmall
                                 )
                             }
+                        )
+                    }
+                },
+                actions = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Switch(
+                            checked = areAllRulesEnabled,
+                            onCheckedChange = { isEnabled ->
+                                coroutineScope.launch {
+                                    database.blockingRuleDao().updateAllRulesEnabled(isEnabled)
+                                    blockingRules = blockingRules.map { it.copy(isEnabled = isEnabled) }
+                                    areAllRulesEnabled = isEnabled
+                                }
+                            },
+                            thumbContent = {
+                                Text(
+                                    if (areAllRulesEnabled) "ON" else "OFF",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.error,
+                                uncheckedTrackColor = MaterialTheme.colorScheme.errorContainer
+                            )
                         )
                     }
                 },
@@ -301,34 +349,17 @@ fun HomeScreen(
                 items(blockingRules) { rule ->
                     BlockingRuleCard(
                         rule = rule,
-                        onEdit = { editRule -> editingRule = editRule },
-                        onDelete = { deleteRule ->
-                            if (deleteRule.groupId != null) {
-                                // Delete all rules in the group
-                                kotlinx.coroutines.runBlocking {
-                                    val rulesToDelete = database.blockingRuleDao().getRulesByGroupId(deleteRule.groupId)
-                                    rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
-                                }
-                            } else {
-                                // Delete single contact rules
-                                kotlinx.coroutines.runBlocking {
-                                    val rulesToDelete = database.blockingRuleDao().getRuleByPhoneNumber(deleteRule.phoneNumber)
-                                    rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
-                                }
-                            }
-                            blockingRules = blockingRules.filter { it.id != deleteRule.id }
-                            usedSlots = maxOf(0, usedSlots - 1)
+                        onDelete = {
+                            refreshRules()
                         },
                         onToggle = { toggleRule, enabled ->
                             kotlinx.coroutines.runBlocking {
                                 if (toggleRule.groupId != null) {
-                                    // Update all rules in the group
                                     val rulesToUpdate = database.blockingRuleDao().getRulesByGroupId(toggleRule.groupId)
                                     rulesToUpdate.forEach { ruleEntity ->
                                         database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
                                     }
                                 } else {
-                                    // Update single contact rules
                                     val rulesToUpdate = database.blockingRuleDao().getRuleByPhoneNumber(toggleRule.phoneNumber)
                                     rulesToUpdate.forEach { ruleEntity ->
                                         database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
@@ -338,6 +369,9 @@ fun HomeScreen(
                             blockingRules = blockingRules.map {
                                 if (it.id == toggleRule.id) it.copy(isEnabled = enabled) else it
                             }
+                        },
+                        onUpdate = {
+                            refreshRules()
                         }
                     )
                 }
@@ -349,53 +383,9 @@ fun HomeScreen(
         AddBlockDialog(
             context = context,
             database = database,
-            onDismiss = { showAddDialog = false },
-            onSave = { rule ->
-                // Refresh from database to get proper grouping
-                kotlinx.coroutines.runBlocking {
-                    val rulesFromDb = database.blockingRuleDao().getAllRules()
-
-                    val individualRules = rulesFromDb.filter { it.groupId == null }
-                    val groupRules = rulesFromDb.filter { it.groupId != null }
-
-                    val individualBlockingRules = individualRules.groupBy { it.phoneNumber }.map { (phoneNumber, rules) ->
-                        val first = rules.first()
-                        BlockingRule(
-                            id = first.id,
-                            contactName = first.contactName,
-                            phoneNumber = phoneNumber,
-                            startTime = first.startTime,
-                            endTime = first.endTime,
-                            daysOfWeek = rules.map { it.daysOfWeek.toIntOrNull() ?: 0 }.distinct().sorted(),
-                            allowEmergency = first.allowEmergency,
-                            isEnabled = first.isEnabled,
-                            groupName = null,
-                            groupId = null
-                        )
-                    }
-
-                    val groupBlockingRules = groupRules.groupBy { it.groupId }.map { (groupId, rules) ->
-                        val first = rules.first()
-                        val allContacts = rules.map { it.contactName }.distinct()
-                        val allPhoneNumbers = rules.map { it.phoneNumber }.distinct()
-
-                        BlockingRule(
-                            id = first.id,
-                            contactName = allContacts.joinToString(", "),
-                            phoneNumber = allPhoneNumbers.joinToString(","),
-                            startTime = first.startTime,
-                            endTime = first.endTime,
-                            daysOfWeek = rules.map { it.daysOfWeek.toIntOrNull() ?: 0 }.distinct().sorted(),
-                            allowEmergency = first.allowEmergency,
-                            isEnabled = first.isEnabled,
-                            groupName = first.groupName,
-                            groupId = groupId
-                        )
-                    }
-
-                    blockingRules = individualBlockingRules + groupBlockingRules
-                    usedSlots = blockingRules.count { it.isEnabled }
-                }
+            onDismiss = { showAddDialog = false},
+            onSave = {
+                refreshRules()
                 showAddDialog = false
             }
         )
@@ -406,66 +396,9 @@ fun HomeScreen(
             context = context,
             database = database,
             onDismiss = { showAddGroupDialog = false },
-            onSave = { groupRule ->
-                // Refresh from database to get proper grouping
-                kotlinx.coroutines.runBlocking {
-                    val rulesFromDb = database.blockingRuleDao().getAllRules()
-
-                    val individualRules = rulesFromDb.filter { it.groupId == null }
-                    val groupRules = rulesFromDb.filter { it.groupId != null }
-
-                    val individualBlockingRules = individualRules.groupBy { it.phoneNumber }.map { (phoneNumber, rules) ->
-                        val first = rules.first()
-                        BlockingRule(
-                            id = first.id,
-                            contactName = first.contactName,
-                            phoneNumber = phoneNumber,
-                            startTime = first.startTime,
-                            endTime = first.endTime,
-                            daysOfWeek = rules.map { it.daysOfWeek.toIntOrNull() ?: 0 }.distinct().sorted(),
-                            allowEmergency = first.allowEmergency,
-                            isEnabled = first.isEnabled,
-                            groupName = null,
-                            groupId = null
-                        )
-                    }
-
-                    val groupBlockingRules = groupRules.groupBy { it.groupId }.map { (groupId, rules) ->
-                        val first = rules.first()
-                        val allContacts = rules.map { it.contactName }.distinct()
-                        val allPhoneNumbers = rules.map { it.phoneNumber }.distinct()
-
-                        BlockingRule(
-                            id = first.id,
-                            contactName = allContacts.joinToString(", "),
-                            phoneNumber = allPhoneNumbers.joinToString(","),
-                            startTime = first.startTime,
-                            endTime = first.endTime,
-                            daysOfWeek = rules.map { it.daysOfWeek.toIntOrNull() ?: 0 }.distinct().sorted(),
-                            allowEmergency = first.allowEmergency,
-                            isEnabled = first.isEnabled,
-                            groupName = first.groupName,
-                            groupId = groupId
-                        )
-                    }
-
-                    blockingRules = individualBlockingRules + groupBlockingRules
-                    usedSlots = blockingRules.count { it.isEnabled }
-                }
+            onSave = {
+                refreshRules()
                 showAddGroupDialog = false
-            }
-        )
-    }
-
-    if (editingRule != null) {
-        AddBlockDialog(
-            context = context,
-            database = database,
-            editingRule = editingRule,
-            onDismiss = { editingRule = null },
-            onSave = { rule ->
-                blockingRules = blockingRules.map { if (it.phoneNumber == rule.phoneNumber) rule else it }
-                editingRule = null
             }
         )
     }
@@ -487,6 +420,69 @@ fun HomeScreen(
         )
     }
 }
+
+@Composable
+fun DayScheduleRow(
+    day: DayBlockingState,
+    startTime: String,
+    endTime: String,
+    onEnableChange: (Boolean) -> Unit,
+    onAllDayChange: (Boolean) -> Unit,
+    onStartTimeChange: (String) -> Unit,
+    onEndTimeChange: (String) -> Unit,
+    context: Context
+) {
+    val timePickerDialog = { isStartTime: Boolean, initialTime: String ->
+        val (hour, minute) = initialTime.split(":").map { it.toInt() }
+        val tpd = android.app.TimePickerDialog(
+            context,
+            { _, h, m ->
+                val formattedTime = String.format("%02d:%02d", h, m)
+                if (isStartTime) onStartTimeChange(formattedTime) else onEndTimeChange(formattedTime)
+            },
+            hour,
+            minute,
+            false // Use 12 or 24-hour format based on system settings
+        )
+        tpd.show()
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = day.enabled,
+                onCheckedChange = onEnableChange
+            )
+            Text(day.name, modifier = Modifier.width(40.dp))
+        }
+
+        if (day.enabled) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!day.allDay) {
+                    TextButton(onClick = { timePickerDialog(true, startTime) }) { Text(startTime) }
+                    Text("-")
+                    TextButton(onClick = { timePickerDialog(false, endTime) }) { Text(endTime) }
+                }
+
+                Row(
+                    modifier = Modifier.padding(start = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("All Day")
+                    Checkbox(
+                        checked = day.allDay,
+                        onCheckedChange = onAllDayChange
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -789,17 +785,10 @@ fun AddGroupDialog(
 fun AddBlockDialog(
     context: Context,
     database: BlockingRuleDatabase,
-    editingRule: BlockingRule? = null,
     onDismiss: () -> Unit,
-    onSave: (BlockingRule) -> Unit
+    onSave: () -> Unit
 ) {
     var selectedContacts by remember { mutableStateOf(listOf<ContactInfo>()) }
-
-    LaunchedEffect(editingRule) {
-        if (editingRule != null) {
-            selectedContacts = listOf(ContactInfo(editingRule.contactName, editingRule.phoneNumber))
-        }
-    }
 
     val contactPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickContact()
@@ -821,62 +810,30 @@ fun AddBlockDialog(
     }
 
     val daysState = remember {
-        if (editingRule != null) {
-            val allRulesForContact = runBlocking {
-                database.blockingRuleDao().getRuleByPhoneNumber(editingRule.phoneNumber)
-            }
-
-            mutableStateListOf(
-                DayBlockingState("Mon", allRulesForContact.any { it.daysOfWeek == "1" }, allRulesForContact.find { it.daysOfWeek == "1" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
-                DayBlockingState("Tue", allRulesForContact.any { it.daysOfWeek == "2" }, allRulesForContact.find { it.daysOfWeek == "2" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
-                DayBlockingState("Wed", allRulesForContact.any { it.daysOfWeek == "3" }, allRulesForContact.find { it.daysOfWeek == "3" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
-                DayBlockingState("Thu", allRulesForContact.any { it.daysOfWeek == "4" }, allRulesForContact.find { it.daysOfWeek == "4" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
-                DayBlockingState("Fri", allRulesForContact.any { it.daysOfWeek == "5" }, allRulesForContact.find { it.daysOfWeek == "5" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
-                DayBlockingState("Sat", allRulesForContact.any { it.daysOfWeek == "6" }, allRulesForContact.find { it.daysOfWeek == "6" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false),
-                DayBlockingState("Sun", allRulesForContact.any { it.daysOfWeek == "7" }, allRulesForContact.find { it.daysOfWeek == "7" }?.let { it.startTime == "00:00" && it.endTime == "23:59" } ?: false)
-            )
-        } else {
-            mutableStateListOf(
-                DayBlockingState("Mon", false, false),
-                DayBlockingState("Tue", false, false),
-                DayBlockingState("Wed", false, false),
-                DayBlockingState("Thu", false, false),
-                DayBlockingState("Fri", false, false),
-                DayBlockingState("Sat", false, false),
-                DayBlockingState("Sun", false, false)
-            )
-        }
+        mutableStateListOf(
+            DayBlockingState("Mon", false, false),
+            DayBlockingState("Tue", false, false),
+            DayBlockingState("Wed", false, false),
+            DayBlockingState("Thu", false, false),
+            DayBlockingState("Fri", false, false),
+            DayBlockingState("Sat", false, false),
+            DayBlockingState("Sun", false, false)
+        )
     }
 
     val dayTimes = remember {
-        if (editingRule != null) {
-            val allRulesForContact = runBlocking {
-                database.blockingRuleDao().getRuleByPhoneNumber(editingRule.phoneNumber)
-            }
-
-            mutableStateMapOf(
-                "Mon" to (allRulesForContact.find { it.daysOfWeek == "1" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
-                "Tue" to (allRulesForContact.find { it.daysOfWeek == "2" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
-                "Wed" to (allRulesForContact.find { it.daysOfWeek == "3" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
-                "Thu" to (allRulesForContact.find { it.daysOfWeek == "4" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
-                "Fri" to (allRulesForContact.find { it.daysOfWeek == "5" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
-                "Sat" to (allRulesForContact.find { it.daysOfWeek == "6" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00")),
-                "Sun" to (allRulesForContact.find { it.daysOfWeek == "7" }?.let { Pair(it.startTime, it.endTime) } ?: Pair("22:00", "07:00"))
-            )
-        } else {
-            mutableStateMapOf(
-                "Mon" to Pair("22:00", "07:00"),
-                "Tue" to Pair("22:00", "07:00"),
-                "Wed" to Pair("22:00", "07:00"),
-                "Thu" to Pair("22:00", "07:00"),
-                "Fri" to Pair("22:00", "07:00"),
-                "Sat" to Pair("22:00", "07:00"),
-                "Sun" to Pair("22:00", "07:00")
-            )
-        }
+        mutableStateMapOf(
+            "Mon" to Pair("22:00", "07:00"),
+            "Tue" to Pair("22:00", "07:00"),
+            "Wed" to Pair("22:00", "07:00"),
+            "Thu" to Pair("22:00", "07:00"),
+            "Fri" to Pair("22:00", "07:00"),
+            "Sat" to Pair("22:00", "07:00"),
+            "Sun" to Pair("22:00", "07:00")
+        )
     }
 
-    var emergencyBypass by remember { mutableStateOf(editingRule?.allowEmergency ?: true) }
+    var emergencyBypass by remember { mutableStateOf(true) }
     var retryWindow by remember { mutableStateOf(5) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -895,7 +852,7 @@ fun AddBlockDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        if (editingRule != null) "Edit Block" else "New Block",
+                        "New Block",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -988,13 +945,6 @@ fun AddBlockDialog(
                             if (selectedContacts.isEmpty()) return@Button
 
                             kotlinx.coroutines.runBlocking {
-                                if (editingRule != null) {
-                                    val oldRules = database.blockingRuleDao().getRuleByPhoneNumber(editingRule.phoneNumber)
-                                    oldRules.forEach { database.blockingRuleDao().delete(it) }
-                                }
-
-                                val allNewRules = mutableListOf<BlockingRule>()
-
                                 selectedContacts.forEach { contact ->
                                     daysState.forEachIndexed { index, day ->
                                         if (day.enabled) {
@@ -1004,60 +954,30 @@ fun AddBlockDialog(
 
                                             val ruleId = "${System.currentTimeMillis()}_${contact.phoneNumber}_${index}".hashCode()
 
-                                            val rule = BlockingRule(
-                                                id = ruleId,
-                                                contactName = contact.name,
-                                                phoneNumber = contact.phoneNumber,
-                                                startTime = startTime,
-                                                endTime = endTime,
-                                                daysOfWeek = listOf(index + 1),
-                                                allowEmergency = emergencyBypass,
-                                                isEnabled = true
-                                            )
-
                                             database.blockingRuleDao().insert(
                                                 BlockingRuleEntity(
-                                                    id = rule.id,
-                                                    contactName = rule.contactName,
-                                                    phoneNumber = rule.phoneNumber,
-                                                    startTime = rule.startTime,
-                                                    endTime = rule.endTime,
+                                                    id = ruleId,
+                                                    contactName = contact.name,
+                                                    phoneNumber = contact.phoneNumber,
+                                                    startTime = startTime,
+                                                    endTime = endTime,
                                                     daysOfWeek = (index + 1).toString(),
-                                                    allowEmergency = rule.allowEmergency,
+                                                    allowEmergency = emergencyBypass,
                                                     retryWindow = retryWindow,
-                                                    isEnabled = rule.isEnabled,
+                                                    isEnabled = true,
                                                     createdAt = System.currentTimeMillis()
                                                 )
                                             )
-
-                                            allNewRules.add(rule)
                                         }
                                     }
                                 }
-
-                                if (allNewRules.isNotEmpty()) {
-                                    val firstContactRules = allNewRules.filter { it.phoneNumber == selectedContacts.first().phoneNumber }
-                                    if (firstContactRules.isNotEmpty()) {
-                                        val firstRule = firstContactRules.first()
-                                        val consolidatedRule = BlockingRule(
-                                            id = firstRule.id,
-                                            contactName = selectedContacts.first().name,
-                                            phoneNumber = firstRule.phoneNumber,
-                                            startTime = firstRule.startTime,
-                                            endTime = firstRule.endTime,
-                                            daysOfWeek = firstContactRules.map { it.daysOfWeek.first() },
-                                            allowEmergency = firstRule.allowEmergency,
-                                            isEnabled = true
-                                        )
-                                        onSave(consolidatedRule)
-                                    }
-                                }
+                                onSave()
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = selectedContacts.isNotEmpty() && daysState.any { it.enabled }
                     ) {
-                        Text(if (editingRule != null) "Update" else "Save")
+                        Text("Save")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -1288,135 +1208,298 @@ fun DayBlockingRow(
 @Composable
 fun BlockingRuleCard(
     rule: BlockingRule,
-    onEdit: (BlockingRule) -> Unit,
-    onDelete: (BlockingRule) -> Unit,
+    onUpdate: () -> Unit,
+    onDelete: () -> Unit,
     onToggle: (BlockingRule, Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val database = remember { BlockingRuleDatabase.getDatabase(context) }
     val isGroup = rule.groupId != null
+    var isExpanded by remember { mutableStateOf(false) }
+    val rotationAngle by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f)
 
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
+    Column {
+        ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .clickable { isExpanded = !isExpanded }
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        if (isGroup && rule.groupName != null) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("👥", style = MaterialTheme.typography.titleMedium)
-                                Spacer(modifier = Modifier.width(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            if (isGroup && rule.groupName != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("👥", style = MaterialTheme.typography.titleMedium)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        rule.groupName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    rule.groupName,
+                                    rule.contactName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Text(
+                                    rule.contactName,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                rule.contactName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        Switch(
+                            checked = rule.isEnabled,
+                            onCheckedChange = { enabled ->
+                                HapticFeedback.performClick(context)
+                                onToggle(rule, enabled)
+                            }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (rule.startTime == "00:00" && rule.endTime == "23:59") {
+                            AssistChip(
+                                onClick = { },
+                                label = { Text("All Day") },
+                                leadingIcon = { Text("⏰") }
                             )
                         } else {
-                            Text(
-                                rule.contactName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                            AssistChip(
+                                onClick = { },
+                                label = { Text("${rule.startTime} - ${rule.endTime}") },
+                                leadingIcon = { Text("⏰") }
                             )
                         }
-                    }
-                    Switch(
-                        checked = rule.isEnabled,
-                        onCheckedChange = { enabled ->
-                            HapticFeedback.performClick(context)
-                            onToggle(rule, enabled)
-                        }
-                    )
-                }
-                Spacer(modifier = Modifier.height(12.dp))
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (rule.startTime == "00:00" && rule.endTime == "23:59") {
                         AssistChip(
                             onClick = { },
-                            label = { Text("All Day") },
-                            leadingIcon = { Text("⏰") }
-                        )
-                    } else {
-                        AssistChip(
-                            onClick = { },
-                            label = { Text("${rule.startTime} - ${rule.endTime}") },
-                            leadingIcon = { Text("⏰") }
+                            label = { Text(formatDaysOfWeek(rule.daysOfWeek)) },
+                            leadingIcon = { Text("📅") }
                         )
                     }
 
-                    AssistChip(
-                        onClick = { },
-                        label = { Text(formatDaysOfWeek(rule.daysOfWeek)) },
-                        leadingIcon = { Text("📅") }
-                    )
-                }
-
-                if (rule.allowEmergency) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Emergency bypass enabled",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Added Edit Button
-                    OutlinedButton(
-                        onClick = { onEdit(rule) },
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text("Edit")
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            if (isGroup) {
-                                kotlinx.coroutines.runBlocking {
-                                    val rulesToDelete = database.blockingRuleDao().getRulesByGroupId(rule.groupId!!)
-                                    rulesToDelete.forEach { ruleEntity ->
-                                        database.blockingRuleDao().delete(ruleEntity)
-                                    }
-                                }
-                            } else {
-                                kotlinx.coroutines.runBlocking {
-                                    val rulesToDelete = database.blockingRuleDao().getRuleByPhoneNumber(rule.phoneNumber)
-                                    rulesToDelete.forEach { ruleEntity ->
-                                        database.blockingRuleDao().delete(ruleEntity)
-                                    }
-                                }
-                            }
-                            onDelete(rule)
-                        },
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
+                    if (rule.allowEmergency) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Emergency bypass enabled",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    ) {
-                        Text("Delete")
                     }
                 }
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Expand",
+                    modifier = Modifier.rotate(rotationAngle)
+                )
             }
+        }
+        AnimatedVisibility(visible = isExpanded) {
+            EditRuleContent(
+                rule = rule,
+                database = database,
+                onSave = {
+                    isExpanded = false
+                    onUpdate()
+                },
+                onCancel = { isExpanded = false },
+                onDelete = {
+                    isExpanded = false
+                    onDelete()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun EditRuleContent(
+    rule: BlockingRule,
+    database: BlockingRuleDatabase,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val context = LocalContext.current
+    val daysState = remember {
+        mutableStateListOf(
+            DayBlockingState("Mon", rule.daysOfWeek.contains(1), false),
+            DayBlockingState("Tue", rule.daysOfWeek.contains(2), false),
+            DayBlockingState("Wed", rule.daysOfWeek.contains(3), false),
+            DayBlockingState("Thu", rule.daysOfWeek.contains(4), false),
+            DayBlockingState("Fri", rule.daysOfWeek.contains(5), false),
+            DayBlockingState("Sat", rule.daysOfWeek.contains(6), false),
+            DayBlockingState("Sun", rule.daysOfWeek.contains(7), false)
+        )
+    }
+
+    val dayTimes = remember {
+        mutableStateMapOf(
+            "Mon" to Pair(rule.startTime, rule.endTime),
+            "Tue" to Pair(rule.startTime, rule.endTime),
+            "Wed" to Pair(rule.startTime, rule.endTime),
+            "Thu" to Pair(rule.startTime, rule.endTime),
+            "Fri" to Pair(rule.startTime, rule.endTime),
+            "Sat" to Pair(rule.startTime, rule.endTime),
+            "Sun" to Pair(rule.startTime, rule.endTime)
+        )
+    }
+
+    var emergencyBypass by remember { mutableStateOf(rule.allowEmergency) }
+    var retryWindow by remember { mutableStateOf(5) }
+
+
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text(
+            "Schedule",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        daysState.forEachIndexed { index, day ->
+            val times = dayTimes[day.name] ?: Pair("22:00", "07:00")
+            DayBlockingRow(
+                day = day,
+                onEnableChange = {
+                    HapticFeedback.performClick(context)
+                    daysState[index] = day.copy(enabled = it)
+                },
+                onAllDayChange = {
+                    HapticFeedback.performClick(context)
+                    daysState[index] = day.copy(allDay = it)
+                },
+                startTime = times.first,
+                endTime = times.second,
+                onStartTimeChange = { dayTimes[day.name] = times.copy(first = it) },
+                onEndTimeChange = { dayTimes[day.name] = times.copy(second = it) },
+                context = context
+            )
+            if (index < daysState.size - 1) Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Emergency Bypass",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    "Allow if retried within ${retryWindow} min",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = emergencyBypass,
+                onCheckedChange = {
+                    HapticFeedback.performClick(context)
+                    emergencyBypass = it
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    runBlocking {
+                        if (rule.groupId != null) {
+                            val oldRules = database.blockingRuleDao().getRulesByGroupId(rule.groupId)
+                            oldRules.forEach { database.blockingRuleDao().delete(it) }
+                        } else {
+                            val oldRules = database.blockingRuleDao().getRuleByPhoneNumber(rule.phoneNumber)
+                            oldRules.forEach { database.blockingRuleDao().delete(it) }
+                        }
+
+                        daysState.forEachIndexed { index, day ->
+                            if (day.enabled) {
+                                val times = dayTimes[day.name] ?: Pair("22:00", "07:00")
+                                val startTime = if (day.allDay) "00:00" else times.first
+                                val endTime = if (day.allDay) "23:59" else times.second
+
+                                val ruleId = "${System.currentTimeMillis()}_${rule.phoneNumber}_${index}".hashCode()
+
+                                database.blockingRuleDao().insert(
+                                    BlockingRuleEntity(
+                                        id = ruleId,
+                                        contactName = rule.contactName,
+                                        phoneNumber = rule.phoneNumber,
+                                        startTime = startTime,
+                                        endTime = endTime,
+                                        daysOfWeek = (index + 1).toString(),
+                                        allowEmergency = emergencyBypass,
+                                        retryWindow = retryWindow,
+                                        isEnabled = rule.isEnabled,
+                                        createdAt = System.currentTimeMillis(),
+                                        groupName = rule.groupName,
+                                        groupId = rule.groupId
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    onSave()
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Save")
+            }
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Cancel")
+            }
+        }
+        TextButton(
+            onClick = {
+                runBlocking {
+                    if (rule.groupId != null) {
+                        val rulesToDelete = database.blockingRuleDao().getRulesByGroupId(rule.groupId)
+                        rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
+                    } else {
+                        val rulesToDelete = database.blockingRuleDao().getRuleByPhoneNumber(rule.phoneNumber)
+                        rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
+                    }
+                }
+                onDelete()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+        ) {
+            Text("Delete")
         }
     }
 }
