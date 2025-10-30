@@ -1,4 +1,4 @@
-package com.example.silenthours
+package com.astris.silenthours
 
 import android.content.Context
 import androidx.datastore.core.DataStore

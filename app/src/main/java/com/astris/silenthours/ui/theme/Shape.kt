@@ -1,4 +1,4 @@
-package com.example.callblocker.ui.theme
+package com.astris.callblocker.ui.theme
 
 import androidx.compose.material3.Shapes
 import androidx.compose.foundation.shape.RoundedCornerShape

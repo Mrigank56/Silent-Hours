@@ -1,10 +1,10 @@
-package com.example.callblocker.ui.theme
+package com.astris.callblocker.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import com.example.silenthours.ui.theme.modernTypography
+import com.astris.silenthours.ui.theme.modernTypography
 
 // Pitch black background, vibrant blue accents
 private val DarkColorScheme = darkColorScheme(
