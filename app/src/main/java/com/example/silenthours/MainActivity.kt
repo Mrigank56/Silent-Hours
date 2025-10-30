@@ -41,7 +41,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.activity.result.ActivityResult
 
 
 
@@ -92,10 +91,10 @@ fun HomeScreen(
     val appSettings = remember { AppSettings(context) }
     val isBlockingEnabled by appSettings.isBlockingEnabled.collectAsState(initial = true)
 
-    val isPremium by billingManager.isPremiumFlow.collectAsState(initial = true)
+    val isPremium by billingManager.isPremiumFlow.collectAsState(initial = false)
     var showAddDialog by remember { mutableStateOf(false) }
     var showAddGroupDialog by remember { mutableStateOf(false) }
-    var showUpgradeDialog by remember { mutableStateOf(false) }
+    var showUpgradeSheet by remember { mutableStateOf(false) }
     var blockingRules by remember { mutableStateOf(listOf<BlockingRule>()) }
 
 
@@ -113,13 +112,12 @@ fun HomeScreen(
 
     val requestRoleLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
-    ) { result: ActivityResult -> // Specify the type here
+    ) { result ->
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
             hasCallScreeningRole = roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_CALL_SCREENING)
         }
     }
-
 
     fun refreshRules() {
         coroutineScope.launch(Dispatchers.IO) {
@@ -247,7 +245,13 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 FloatingActionButton(
-                    onClick = { showAddGroupDialog = true },
+                    onClick = {
+                        if (isPremium) {
+                            showAddGroupDialog = true
+                        } else {
+                            showUpgradeSheet = true
+                        }
+                    },
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier.size(56.dp)
@@ -255,7 +259,13 @@ fun HomeScreen(
                     Text("👥", style = MaterialTheme.typography.titleLarge)
                 }
                 FloatingActionButton(
-                    onClick = { showAddDialog = true },
+                    onClick = {
+                        if (isPremium || blockingRules.size < 3) {
+                            showAddDialog = true
+                        } else {
+                            showUpgradeSheet = true
+                        }
+                    },
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(64.dp)
@@ -425,21 +435,56 @@ fun HomeScreen(
         )
     }
 
-    if (showUpgradeDialog) {
-        AlertDialog(
-            onDismissRequest = { showUpgradeDialog = false },
-            title = { Text("Upgrade to Premium") },
-            text = { Text("Upgrade to Premium for ₹99 (one-time) to add unlimited blocking rules!") },
-            confirmButton = {
-                Button(onClick = {
-                    billingManager.purchasePremium(activity)
-                    showUpgradeDialog = false
-                }) {
-                    Text("Upgrade Now")
-                }
-            },
-            dismissButton = { TextButton(onClick = { showUpgradeDialog = false }) { Text("Maybe Later") } }
+    if (showUpgradeSheet) {
+        UpgradeBottomSheet(
+            onDismiss = { showUpgradeSheet = false },
+            onUpgrade = {
+                billingManager.purchasePremium(activity)
+                showUpgradeSheet = false
+            }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun UpgradeBottomSheet(
+    onDismiss: () -> Unit,
+    onUpgrade: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                "Upgrade to Premium",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Unlock unlimited blocking rules and the ability to create groups for just ₹199 (one-time payment).",
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Button(
+                onClick = onUpgrade,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Upgrade Now for ₹199")
+            }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Maybe Later")
+            }
+        }
     }
 }
 
