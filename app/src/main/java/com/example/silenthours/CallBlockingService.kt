@@ -3,6 +3,7 @@ package com.example.silenthours
 import android.telecom.Call
 import android.telecom.CallScreeningService
 import android.util.Log
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -15,6 +16,7 @@ class CallBlockingService : CallScreeningService() {
     }
 
     private val database by lazy { BlockingRuleDatabase.getDatabase(applicationContext) }
+    private val appSettings by lazy { AppSettings(applicationContext) }
 
     override fun onScreenCall(callDetails: Call.Details) {
         val incomingNumber = callDetails.handle?.schemeSpecificPart ?: ""
@@ -38,6 +40,13 @@ class CallBlockingService : CallScreeningService() {
     private fun shouldBlockCall(phoneNumber: String): Boolean {
         return try {
             runBlocking {
+                // First, check the global blocking setting
+                val isBlockingEnabled = appSettings.isBlockingEnabled.first()
+                if (!isBlockingEnabled) {
+                    Log.d(TAG, "Global blocking is disabled, call will be ALLOWED")
+                    return@runBlocking false
+                }
+
                 val now = LocalDateTime.now()
                 val currentTime = LocalTime.now()
                 val dayOfWeek = now.dayOfWeek.value // 1=Monday, 7=Sunday

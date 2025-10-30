@@ -28,6 +28,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -35,8 +36,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.example.callblocker.ui.theme.SilentHoursTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import androidx.activity.result.ActivityResult
 
 
 
@@ -83,15 +88,15 @@ fun HomeScreen(
     billingManager: BillingManager,
     activity: Activity
 ) {
+    val context = LocalContext.current
+    val appSettings = remember { AppSettings(context) }
+    val isBlockingEnabled by appSettings.isBlockingEnabled.collectAsState(initial = true)
+
     val isPremium by billingManager.isPremiumFlow.collectAsState(initial = true)
-    var usedSlots by remember { mutableStateOf(0) }
-    val freeSlots = 999
     var showAddDialog by remember { mutableStateOf(false) }
     var showAddGroupDialog by remember { mutableStateOf(false) }
     var showUpgradeDialog by remember { mutableStateOf(false) }
-    val context = LocalContext.current
     var blockingRules by remember { mutableStateOf(listOf<BlockingRule>()) }
-    var areAllRulesEnabled by remember { mutableStateOf(true) }
 
 
     val database = remember { BlockingRuleDatabase.getDatabase(context) }
@@ -108,15 +113,16 @@ fun HomeScreen(
 
     val requestRoleLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
+    ) { result: ActivityResult -> // Specify the type here
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
             hasCallScreeningRole = roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_CALL_SCREENING)
         }
     }
 
+
     fun refreshRules() {
-        coroutineScope.launch {
+        coroutineScope.launch(Dispatchers.IO) {
             val rulesFromDb = database.blockingRuleDao().getAllRules()
 
             // Separate individual rules and group rules
@@ -126,12 +132,15 @@ fun HomeScreen(
             // Process individual rules (one card per contact)
             val individualBlockingRules = individualRules.groupBy { it.phoneNumber }.map { (phoneNumber, rules) ->
                 val first = rules.first()
+                val distinctTimes = rules.map { it.startTime to it.endTime }.distinct()
+                val (startTime, endTime) = if (distinctTimes.size > 1) "Varies" to "" else distinctTimes.first()
+
                 BlockingRule(
                     id = first.id,
                     contactName = first.contactName,
                     phoneNumber = phoneNumber,
-                    startTime = first.startTime,
-                    endTime = first.endTime,
+                    startTime = startTime,
+                    endTime = endTime,
                     daysOfWeek = rules.mapNotNull { it.daysOfWeek.toIntOrNull() }.distinct().sorted(),
                     allowEmergency = first.allowEmergency,
                     isEnabled = first.isEnabled,
@@ -145,13 +154,15 @@ fun HomeScreen(
                 val first = rules.first()
                 val allContacts = rules.map { it.contactName }.distinct()
                 val allPhoneNumbers = rules.map { it.phoneNumber }.distinct()
+                val distinctTimes = rules.map { it.startTime to it.endTime }.distinct()
+                val (startTime, endTime) = if (distinctTimes.size > 1) "Varies" to "" else distinctTimes.first()
 
                 BlockingRule(
                     id = first.id,
                     contactName = allContacts.joinToString(", "),
                     phoneNumber = allPhoneNumbers.joinToString(","),
-                    startTime = first.startTime,
-                    endTime = first.endTime,
+                    startTime = startTime,
+                    endTime = endTime,
                     daysOfWeek = rules.mapNotNull { it.daysOfWeek.toIntOrNull() }.distinct().sorted(),
                     allowEmergency = first.allowEmergency,
                     isEnabled = first.isEnabled,
@@ -160,9 +171,9 @@ fun HomeScreen(
                 )
             }
 
-            blockingRules = individualBlockingRules + groupBlockingRules
-            usedSlots = blockingRules.count { it.isEnabled }
-            areAllRulesEnabled = blockingRules.all { it.isEnabled }
+            withContext(Dispatchers.Main) {
+                blockingRules = individualBlockingRules + groupBlockingRules
+            }
         }
     }
 
@@ -204,17 +215,15 @@ fun HomeScreen(
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
                         Switch(
-                            checked = areAllRulesEnabled,
+                            checked = isBlockingEnabled,
                             onCheckedChange = { isEnabled ->
                                 coroutineScope.launch {
-                                    database.blockingRuleDao().updateAllRulesEnabled(isEnabled)
-                                    blockingRules = blockingRules.map { it.copy(isEnabled = isEnabled) }
-                                    areAllRulesEnabled = isEnabled
+                                    appSettings.setBlockingEnabled(isEnabled)
                                 }
                             },
                             thumbContent = {
                                 Text(
-                                    if (areAllRulesEnabled) "ON" else "OFF",
+                                    if (isBlockingEnabled) "ON" else "OFF",
                                     style = MaterialTheme.typography.labelSmall
                                 )
                             },
@@ -345,11 +354,12 @@ fun HomeScreen(
                     )
                 }
 
-                items(blockingRules) { rule ->
+                items(blockingRules, key = { it.id }) { rule ->
                     BlockingRuleCard(
                         rule = rule,
+                        isEnabled = isBlockingEnabled,
                         onDelete = {
-                            coroutineScope.launch {
+                            coroutineScope.launch(Dispatchers.IO) {
                                 if (rule.groupId != null) {
                                     val rulesToDelete = database.blockingRuleDao().getRulesByGroupId(rule.groupId)
                                     rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
@@ -357,11 +367,13 @@ fun HomeScreen(
                                     val rulesToDelete = database.blockingRuleDao().getRuleByPhoneNumber(rule.phoneNumber)
                                     rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
                                 }
-                                refreshRules()
+                                withContext(Dispatchers.Main) {
+                                    refreshRules()
+                                }
                             }
                         },
                         onToggle = { toggleRule, enabled ->
-                            coroutineScope.launch {
+                            coroutineScope.launch(Dispatchers.IO) {
                                 if (toggleRule.groupId != null) {
                                     val rulesToUpdate = database.blockingRuleDao().getRulesByGroupId(toggleRule.groupId)
                                     rulesToUpdate.forEach { ruleEntity ->
@@ -373,8 +385,10 @@ fun HomeScreen(
                                         database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
                                     }
                                 }
-                                blockingRules = blockingRules.map {
-                                    if (it.id == toggleRule.id) it.copy(isEnabled = enabled) else it
+                                withContext(Dispatchers.Main) {
+                                    blockingRules = blockingRules.map {
+                                        if (it.id == toggleRule.id) it.copy(isEnabled = enabled) else it
+                                    }
                                 }
                             }
                         },
@@ -508,10 +522,12 @@ fun AddGroupDialog(
         contract = ActivityResultContracts.PickContact()
     ) { contactUri ->
         if (contactUri != null) {
-            val contactInfo = getContactFromUri(context, contactUri)
-            if (contactInfo != null) {
-                if (!selectedContacts.any { it.phoneNumber == contactInfo.phoneNumber }) {
-                    selectedContacts = selectedContacts + contactInfo
+            coroutineScope.launch {
+                val contactInfo = getContactFromUri(context, contactUri)
+                if (contactInfo != null) {
+                    if (!selectedContacts.any { it.phoneNumber == contactInfo.phoneNumber }) {
+                        selectedContacts = selectedContacts + contactInfo
+                    }
                 }
             }
         }
@@ -711,7 +727,7 @@ fun AddGroupDialog(
                         onClick = {
                             if (selectedContacts.isEmpty() || groupName.isBlank()) return@Button
 
-                            coroutineScope.launch {
+                            coroutineScope.launch(Dispatchers.IO) {
                                 val groupId = "group_${System.currentTimeMillis()}"
 
                                 // Save all contacts with same group ID and schedule
@@ -765,7 +781,9 @@ fun AddGroupDialog(
                                         groupName = groupName,
                                         groupId = groupId
                                     )
-                                    onSave(groupRule)
+                                    withContext(Dispatchers.Main) {
+                                        onSave(groupRule)
+                                    }
                                 }
                             }
                         },
@@ -804,10 +822,12 @@ fun AddBlockDialog(
         contract = ActivityResultContracts.PickContact()
     ) { contactUri ->
         if (contactUri != null) {
-            val contactInfo = getContactFromUri(context, contactUri)
-            if (contactInfo != null) {
-                if (!selectedContacts.any { it.phoneNumber == contactInfo.phoneNumber }) {
-                    selectedContacts = selectedContacts + contactInfo
+            coroutineScope.launch {
+                val contactInfo = getContactFromUri(context, contactUri)
+                if (contactInfo != null) {
+                    if (!selectedContacts.any { it.phoneNumber == contactInfo.phoneNumber }) {
+                        selectedContacts = selectedContacts + contactInfo
+                    }
                 }
             }
         }
@@ -954,7 +974,7 @@ fun AddBlockDialog(
                         onClick = {
                             if (selectedContacts.isEmpty()) return@Button
 
-                            coroutineScope.launch {
+                            coroutineScope.launch(Dispatchers.IO) {
                                 selectedContacts.forEach { contact ->
                                     daysState.forEachIndexed { index, day ->
                                         if (day.enabled) {
@@ -981,7 +1001,9 @@ fun AddBlockDialog(
                                         }
                                     }
                                 }
-                                onSave()
+                                withContext(Dispatchers.Main) {
+                                    onSave()
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -1218,6 +1240,7 @@ fun DayBlockingRow(
 @Composable
 fun BlockingRuleCard(
     rule: BlockingRule,
+    isEnabled: Boolean,
     onUpdate: () -> Unit,
     onDelete: () -> Unit,
     onToggle: (BlockingRule, Boolean) -> Unit
@@ -1225,8 +1248,11 @@ fun BlockingRuleCard(
     val context = LocalContext.current
     var isExpanded by remember { mutableStateOf(false) }
     val rotationAngle by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f)
+    val coroutineScope = rememberCoroutineScope()
 
-    Column {
+    Column(
+        modifier = Modifier.alpha(if (isEnabled) 1f else 0.5f)
+    ) {
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1234,7 +1260,7 @@ fun BlockingRuleCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded }
+                    .clickable(enabled = isEnabled) { isExpanded = !isExpanded }
                     .padding(20.dp)
             ) {
                 Row(
@@ -1278,7 +1304,8 @@ fun BlockingRuleCard(
                                 onCheckedChange = { enabled ->
                                     HapticFeedback.performClick(context)
                                     onToggle(rule, enabled)
-                                }
+                                },
+                                enabled = isEnabled
                             )
                         }
                         Spacer(modifier = Modifier.height(12.dp))
@@ -1290,7 +1317,13 @@ fun BlockingRuleCard(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (rule.startTime == "00:00" && rule.endTime == "23:59") {
+                                if (rule.startTime == "Varies") {
+                                    AssistChip(
+                                        onClick = { },
+                                        label = { Text("Multiple Times") },
+                                        leadingIcon = { Text("⏰") }
+                                    )
+                                } else if (rule.startTime == "00:00" && rule.endTime == "23:59") {
                                     AssistChip(
                                         onClick = { },
                                         label = { Text("All Day") },
@@ -1310,7 +1343,7 @@ fun BlockingRuleCard(
                                     leadingIcon = { Text("📅") }
                                 )
                             }
-                            IconButton(onClick = onDelete) {
+                            IconButton(onClick = onDelete, enabled = isEnabled) {
                                 Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
                             }
                         }
@@ -1337,6 +1370,7 @@ fun BlockingRuleCard(
         AnimatedVisibility(visible = isExpanded) {
             EditRuleContent(
                 rule = rule,
+                coroutineScope = coroutineScope,
                 onSave = {
                     isExpanded = false
                     onUpdate()
@@ -1354,13 +1388,13 @@ fun BlockingRuleCard(
 @Composable
 fun EditRuleContent(
     rule: BlockingRule,
+    coroutineScope: CoroutineScope,
     onSave: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit
 ) {
     val context = LocalContext.current
     val database = remember { BlockingRuleDatabase.getDatabase(context) }
-    val coroutineScope = rememberCoroutineScope()
     val daysState = remember {
         mutableStateListOf(
             DayBlockingState("Mon", rule.daysOfWeek.contains(1), false),
@@ -1374,16 +1408,39 @@ fun EditRuleContent(
     }
 
     val dayTimes = remember {
-        mutableStateMapOf(
-            "Mon" to Pair(rule.startTime, rule.endTime),
-            "Tue" to Pair(rule.startTime, rule.endTime),
-            "Wed" to Pair(rule.startTime, rule.endTime),
-            "Thu" to Pair(rule.startTime, rule.endTime),
-            "Fri" to Pair(rule.startTime, rule.endTime),
-            "Sat" to Pair(rule.startTime, rule.endTime),
-            "Sun" to Pair(rule.startTime, rule.endTime)
-        )
+        mutableStateMapOf<String, Pair<String, String>>()
     }
+
+    LaunchedEffect(rule) {
+        coroutineScope.launch(Dispatchers.IO) {
+            val rulesFromDb = if (rule.groupId != null) {
+                database.blockingRuleDao().getRulesByGroupId(rule.groupId)
+            } else {
+                database.blockingRuleDao().getRuleByPhoneNumber(rule.phoneNumber)
+            }
+
+            val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+            // Initialize all days with the display time as a fallback
+            dayNames.forEach { dayName ->
+                dayTimes[dayName] = Pair(rule.startTime, rule.endTime)
+            }
+
+            // Overwrite with specific times from DB
+            rulesFromDb.forEach { entity ->
+                val dayIndex = entity.daysOfWeek.toIntOrNull()
+                if (dayIndex != null && dayIndex in 1..7) {
+                    val dayName = dayNames[dayIndex - 1]
+                    val allDay = entity.startTime == "00:00" && entity.endTime == "23:59"
+                    withContext(Dispatchers.Main) {
+                        dayTimes[dayName] = Pair(entity.startTime, entity.endTime)
+                        daysState[dayIndex-1] = daysState[dayIndex-1].copy(allDay = allDay)
+                    }
+                }
+            }
+        }
+    }
+
 
     var emergencyBypass by remember { mutableStateOf(rule.allowEmergency) }
     var retryWindow by remember { mutableStateOf(5) }
@@ -1456,7 +1513,7 @@ fun EditRuleContent(
         ) {
             Button(
                 onClick = {
-                    coroutineScope.launch {
+                    coroutineScope.launch(Dispatchers.IO) {
                         if (rule.groupId != null) {
                             val oldRules = database.blockingRuleDao().getRulesByGroupId(rule.groupId)
                             oldRules.forEach { database.blockingRuleDao().delete(it) }
@@ -1491,7 +1548,9 @@ fun EditRuleContent(
                                 )
                             }
                         }
-                        onSave()
+                        withContext(Dispatchers.Main) {
+                            onSave()
+                        }
                     }
                 },
                 modifier = Modifier.weight(1f)
@@ -1550,8 +1609,8 @@ data class ContactInfo(
     val phoneNumber: String
 )
 
-fun getContactFromUri(context: Context, contactUri: Uri): ContactInfo? {
-    return try {
+suspend fun getContactFromUri(context: Context, contactUri: Uri): ContactInfo? = withContext(Dispatchers.IO) {
+    try {
         var name = ""
         var phoneNumber = ""
         var contactId = ""
@@ -1605,6 +1664,7 @@ object HapticFeedback {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             vibrator.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_CLICK))
         } else {
+            @Suppress("DEPRECATION")
             vibrator.vibrate(10)
         }
     }
@@ -1614,6 +1674,7 @@ object HapticFeedback {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             vibrator.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_HEAVY_CLICK))
         } else {
+            @Suppress("DEPRECATION")
             vibrator.vibrate(20)
         }
     }
