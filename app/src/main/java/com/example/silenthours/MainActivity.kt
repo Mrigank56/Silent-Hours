@@ -2,6 +2,7 @@ package com.example.silenthours
 
 import android.Manifest
 import android.app.Activity
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -41,7 +42,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
+import kotlin.text.format
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 
 class MainActivity : ComponentActivity() {
@@ -618,7 +621,9 @@ fun AddGroupDialog(
                 .fillMaxHeight(0.9f),
             shape = RoundedCornerShape(28.dp)
         ) {
-            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+            Column(modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -918,7 +923,9 @@ fun AddBlockDialog(
                 .fillMaxHeight(0.9f),
             shape = RoundedCornerShape(28.dp)
         ) {
-            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+            Column(modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1072,105 +1079,6 @@ fun AddBlockDialog(
 }
 
 @Composable
-fun TimePickerDialog(
-    initialTime: String = "22:00",
-    onTimeSelected: (String) -> Unit,
-    onDismiss: () -> Unit,
-    context: Context? = null
-) {
-    val parts = initialTime.split(":")
-    val initialHour = parts.getOrNull(0)?.toIntOrNull() ?: 22
-    val initialMinute = parts.getOrNull(1)?.toIntOrNull() ?: 0
-
-    var hour by remember { mutableStateOf(initialHour.toFloat()) }
-    var minute by remember { mutableStateOf(initialMinute.toFloat()) }
-
-    Dialog(onDismissRequest = onDismiss) {
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "Select Time",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    "${hour.toInt().toString().padStart(2, '0')}:${minute.toInt().toString().padStart(2, '0')}",
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(32.dp))
-
-                Text(
-                    "Hour",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = hour,
-                    onValueChange = {
-                        hour = it
-                        context?.let { ctx -> HapticFeedback.performClick(ctx) }
-                    },
-                    valueRange = 0f..23f,
-                    steps = 23,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    "Minute",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = minute,
-                    onValueChange = {
-                        minute = it
-                        context?.let { ctx -> HapticFeedback.performClick(ctx) }
-                    },
-                    valueRange = 0f..59f,
-                    steps = 59,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TextButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Cancel")
-                    }
-                    Button(
-                        onClick = {
-                            val timeString = "${hour.toInt().toString().padStart(2, '0')}:${minute.toInt().toString().padStart(2, '0')}"
-                            onTimeSelected(timeString)
-                            context?.let { ctx -> HapticFeedback.performHeavyClick(ctx) }
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("OK")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun DayBlockingRow(
     day: DayBlockingState,
     onEnableChange: (Boolean) -> Unit,
@@ -1179,10 +1087,12 @@ fun DayBlockingRow(
     endTime: String = "07:00",
     onStartTimeChange: (String) -> Unit = {},
     onEndTimeChange: (String) -> Unit = {},
-    context: Context? = null
+    context: Context
 ) {
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
+
+    val timeFormatter = remember { mutableStateOf(DateTimeFormatter.ofPattern("HH:mm")) }
 
     ElevatedCard(
         modifier = Modifier.fillMaxWidth()
@@ -1257,28 +1167,39 @@ fun DayBlockingRow(
         }
     }
 
-    if (showStartTimePicker && context != null) {
+    if (showStartTimePicker) {
+        val initialHour = startTime.split(":")[0].toInt()
+        val initialMinute = startTime.split(":")[1].toInt()
         TimePickerDialog(
-            initialTime = startTime,
-            onTimeSelected = { newTime ->
-                onStartTimeChange(newTime)
+            context,
+            { _, hour, minute -> // <-- FIX: Removed explicit types
+                // AFTER (Simpler)
+                val selectedTime = LocalTime.of(hour, minute)
+                onStartTimeChange(timeFormatter.value.format(selectedTime))
                 showStartTimePicker = false
             },
-            onDismiss = { showStartTimePicker = false },
-            context = context
-        )
+            initialHour,
+            initialMinute,
+            false
+        ).show()
     }
 
-    if (showEndTimePicker && context != null) {
+    if (showEndTimePicker) {
+        val initialHour = endTime.split(":")[0].toInt()
+        val initialMinute = endTime.split(":")[1].toInt()
         TimePickerDialog(
-            initialTime = endTime,
-            onTimeSelected = { newTime ->
-                onEndTimeChange(newTime)
+            context,
+            { _, hour, minute -> // <-- FIX: Removed explicit types
+                // BEFORE
+                // AFTER (Simpler)
+                val selectedTime = LocalTime.of(hour, minute)
+                onEndTimeChange(timeFormatter.value.format(selectedTime))
                 showEndTimePicker = false
             },
-            onDismiss = { showEndTimePicker = false },
-            context = context
-        )
+            initialHour,
+            initialMinute,
+            false
+        ).show()
     }
 }
 
