@@ -42,9 +42,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.text.format
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+
 
 
 class MainActivity : ComponentActivity() {
@@ -371,6 +371,7 @@ fun HomeScreen(
                     BlockingRuleCard(
                         rule = rule,
                         isEnabled = isBlockingEnabled,
+                        isDarkMode = isDarkMode,
                         onDelete = {
                             coroutineScope.launch(Dispatchers.IO) {
                                 if (rule.groupId != null) {
@@ -418,6 +419,7 @@ fun HomeScreen(
         AddBlockDialog(
             context = context,
             database = database,
+            isDarkMode = isDarkMode,
             onDismiss = { showAddDialog = false},
             onSave = {
                 refreshRules()
@@ -430,6 +432,7 @@ fun HomeScreen(
         AddGroupDialog(
             context = context,
             database = database,
+            isDarkMode = isDarkMode,
             onDismiss = { showAddGroupDialog = false },
             onSave = {
                 refreshRules()
@@ -491,74 +494,12 @@ fun UpgradeBottomSheet(
     }
 }
 
-@Composable
-fun DayScheduleRow(
-    day: DayBlockingState,
-    startTime: String,
-    endTime: String,
-    onEnableChange: (Boolean) -> Unit,
-    onAllDayChange: (Boolean) -> Unit,
-    onStartTimeChange: (String) -> Unit,
-    onEndTimeChange: (String) -> Unit,
-    context: Context
-) {
-    val timePickerDialog = { isStartTime: Boolean, initialTime: String ->
-        val (hour, minute) = initialTime.split(":").map { it.toInt() }
-        val tpd = android.app.TimePickerDialog(
-            context,
-            { _, h, m ->
-                val formattedTime = String.format("%02d:%02d", h, m)
-                if (isStartTime) onStartTimeChange(formattedTime) else onEndTimeChange(formattedTime)
-            },
-            hour,
-            minute,
-            false // Use 12 or 24-hour format based on system settings
-        )
-        tpd.show()
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(
-                checked = day.enabled,
-                onCheckedChange = onEnableChange
-            )
-            Text(day.name, modifier = Modifier.width(40.dp))
-        }
-
-        if (day.enabled) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!day.allDay) {
-                    TextButton(onClick = { timePickerDialog(true, startTime) }) { Text(startTime) }
-                    Text("-")
-                    TextButton(onClick = { timePickerDialog(false, endTime) }) { Text(endTime) }
-                }
-
-                Row(
-                    modifier = Modifier.padding(start = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("All Day")
-                    Checkbox(
-                        checked = day.allDay,
-                        onCheckedChange = onAllDayChange
-                    )
-                }
-            }
-        }
-    }
-}
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddGroupDialog(
     context: Context,
     database: BlockingRuleDatabase,
+    isDarkMode: Boolean,
     onDismiss: () -> Unit,
     onSave: (BlockingRule) -> Unit
 ) {
@@ -737,7 +678,8 @@ fun AddGroupDialog(
                             endTime = times.second,
                             onStartTimeChange = { dayTimes[day.name] = times.copy(first = it) },
                             onEndTimeChange = { dayTimes[day.name] = times.copy(second = it) },
-                            context = context
+                            context = context,
+                            isDarkMode = isDarkMode
                         )
                         if (index < daysState.size - 1) Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -862,6 +804,7 @@ fun AddGroupDialog(
 fun AddBlockDialog(
     context: Context,
     database: BlockingRuleDatabase,
+    isDarkMode: Boolean,
     onDismiss: () -> Unit,
     onSave: () -> Unit
 ) {
@@ -986,7 +929,8 @@ fun AddBlockDialog(
                             endTime = times.second,
                             onStartTimeChange = { dayTimes[day.name] = times.copy(first = it) },
                             onEndTimeChange = { dayTimes[day.name] = times.copy(second = it) },
-                            context = context
+                            context = context,
+                            isDarkMode = isDarkMode
                         )
                         if (index < daysState.size - 1) Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -1087,7 +1031,8 @@ fun DayBlockingRow(
     endTime: String = "07:00",
     onStartTimeChange: (String) -> Unit = {},
     onEndTimeChange: (String) -> Unit = {},
-    context: Context
+    context: Context,
+    isDarkMode: Boolean
 ) {
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
@@ -1168,12 +1113,13 @@ fun DayBlockingRow(
     }
 
     if (showStartTimePicker) {
+        val theme = if (isDarkMode) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert
         val initialHour = startTime.split(":")[0].toInt()
         val initialMinute = startTime.split(":")[1].toInt()
         TimePickerDialog(
             context,
-            { _, hour, minute -> // <-- FIX: Removed explicit types
-                // AFTER (Simpler)
+            theme,
+            { _, hour, minute ->
                 val selectedTime = LocalTime.of(hour, minute)
                 onStartTimeChange(timeFormatter.value.format(selectedTime))
                 showStartTimePicker = false
@@ -1185,13 +1131,13 @@ fun DayBlockingRow(
     }
 
     if (showEndTimePicker) {
+        val theme = if (isDarkMode) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert
         val initialHour = endTime.split(":")[0].toInt()
         val initialMinute = endTime.split(":")[1].toInt()
         TimePickerDialog(
             context,
-            { _, hour, minute -> // <-- FIX: Removed explicit types
-                // BEFORE
-                // AFTER (Simpler)
+            theme,
+            { _, hour, minute ->
                 val selectedTime = LocalTime.of(hour, minute)
                 onEndTimeChange(timeFormatter.value.format(selectedTime))
                 showEndTimePicker = false
@@ -1207,6 +1153,7 @@ fun DayBlockingRow(
 fun BlockingRuleCard(
     rule: BlockingRule,
     isEnabled: Boolean,
+    isDarkMode: Boolean,
     onUpdate: () -> Unit,
     onDelete: () -> Unit,
     onToggle: (BlockingRule, Boolean) -> Unit
@@ -1337,6 +1284,7 @@ fun BlockingRuleCard(
             EditRuleContent(
                 rule = rule,
                 coroutineScope = coroutineScope,
+                isDarkMode = isDarkMode,
                 onSave = {
                     isExpanded = false
                     onUpdate()
@@ -1355,6 +1303,7 @@ fun BlockingRuleCard(
 fun EditRuleContent(
     rule: BlockingRule,
     coroutineScope: CoroutineScope,
+    isDarkMode: Boolean,
     onSave: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit
@@ -1436,7 +1385,8 @@ fun EditRuleContent(
                 endTime = times.second,
                 onStartTimeChange = { dayTimes[day.name] = times.copy(first = it) },
                 onEndTimeChange = { dayTimes[day.name] = times.copy(second = it) },
-                context = context
+                context = context,
+                isDarkMode = isDarkMode
             )
             if (index < daysState.size - 1) Spacer(modifier = Modifier.height(8.dp))
         }
