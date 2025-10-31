@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1040291101835",
+    "project_id": "silent-hours",
+    "storage_bucket": "silent-hours.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1040291101835:android:a96110e06e9adb65bd288e",
+        "android_client_info": {
+          "package_name": "com.example.silenthours"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzWla6-Fsc1BQ-0IIeJUMBxiWeFQx6U1Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
