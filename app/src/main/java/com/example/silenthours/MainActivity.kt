@@ -243,37 +243,60 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
+            var isFabMenuOpen by remember { mutableStateOf(false) }
+            val rotationAngle by animateFloatAsState(targetValue = if (isFabMenuOpen) 45f else 0f)
+
             Column(
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                FloatingActionButton(
-                    onClick = {
-                        if (isPremium) {
-                            showAddGroupDialog = true
-                        } else {
-                            showUpgradeSheet = true
+                AnimatedVisibility(visible = isFabMenuOpen) {
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        SmallFloatingActionButton(
+                            onClick = {
+                                if (isPremium) {
+                                    showAddGroupDialog = true
+                                } else {
+                                    showUpgradeSheet = true
+                                }
+                                isFabMenuOpen = false
+                            },
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ) {
+                            Icon(Icons.Filled.GroupAdd, "Add Group")
                         }
-                    },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(56.dp)
-                ) {
-                    Text("👥", style = MaterialTheme.typography.titleLarge)
+
+                        SmallFloatingActionButton(
+                            onClick = {
+                                if (isPremium || blockingRules.size < 3) {
+                                    showAddDialog = true
+                                } else {
+                                    showUpgradeSheet = true
+                                }
+                                isFabMenuOpen = false
+                            },
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ) {
+                            Icon(Icons.Default.PersonAdd, "Add Contact")
+                        }
+                    }
                 }
+
                 FloatingActionButton(
-                    onClick = {
-                        if (isPremium || blockingRules.size < 3) {
-                            showAddDialog = true
-                        } else {
-                            showUpgradeSheet = true
-                        }
-                    },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(64.dp)
+                    onClick = { isFabMenuOpen = !isFabMenuOpen },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 ) {
-                    Icon(Icons.Filled.Add, "Add Contact", modifier = Modifier.size(28.dp))
+                    Icon(
+                        Icons.Default.Add,
+                        "Add",
+                        modifier = Modifier.rotate(rotationAngle)
+                    )
                 }
             }
         }
