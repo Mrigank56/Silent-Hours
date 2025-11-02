@@ -99,6 +99,7 @@ fun HomeScreen(
     var showAddGroupDialog by remember { mutableStateOf(false) }
     var showUpgradeSheet by remember { mutableStateOf(false) }
     var blockingRules by remember { mutableStateOf(listOf<BlockingRule>()) }
+    var showDeleteAllDialog by remember { mutableStateOf(false) }
 
 
     val database = remember { BlockingRuleDatabase.getDatabase(context) }
@@ -193,48 +194,57 @@ fun HomeScreen(
                         fontWeight = FontWeight.Bold
                     )
                 },
-                navigationIcon = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 8.dp)
-                    ) {
-                        Switch(
-                            checked = isDarkMode,
-                            onCheckedChange = { onThemeToggle() },
-                            thumbContent = {
-                                Text(
-                                    if (isDarkMode) "🌙" else "☀️",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                        )
-                    }
-                },
                 actions = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Switch(
-                            checked = isBlockingEnabled,
-                            onCheckedChange = { isEnabled ->
-                                coroutineScope.launch {
-                                    appSettings.setBlockingEnabled(isEnabled)
-                                }
-                            },
-                            thumbContent = {
-                                Text(
-                                    if (isBlockingEnabled) "ON" else "OFF",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.error,
-                                uncheckedTrackColor = MaterialTheme.colorScheme.errorContainer
+                    var menuExpanded by remember { mutableStateOf(false) }
+
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                        }
+
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Toggle Theme") },
+                                leadingIcon = {
+                                    Icon(
+                                        if (isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode,
+                                        contentDescription = "Toggle Theme"
+                                    )
+                                },
+                                trailingIcon = {
+                                    Switch(
+                                        checked = isDarkMode,
+                                        onCheckedChange = { onThemeToggle() },
+                                        thumbContent = {
+                                            Icon(
+                                                if (isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize)
+                                            )
+                                        }
+                                    )
+                                },
+                                onClick = { onThemeToggle() }
                             )
-                        )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Delete All Rules", color = MaterialTheme.colorScheme.error) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.DeleteForever,
+                                        contentDescription = "Delete All Rules",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                },
+                                onClick = {
+                                    showDeleteAllDialog = true
+                                    menuExpanded = false
+                                }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -267,7 +277,7 @@ fun HomeScreen(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                         ) {
-                            Icon(Icons.Filled.GroupAdd, "Add Group")
+                            Icon(Icons.Default.GroupAdd, "Add Group")
                         }
 
                         SmallFloatingActionButton(
@@ -383,6 +393,40 @@ fun HomeScreen(
                 }
             } else {
                 item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Enable Call Blocking",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Switch(
+                            checked = isBlockingEnabled,
+                            onCheckedChange = { isEnabled ->
+                                coroutineScope.launch {
+                                    appSettings.setBlockingEnabled(isEnabled)
+                                }
+                            },
+                            thumbContent = {
+                                Text(
+                                    if (isBlockingEnabled) "ON" else "OFF",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.error,
+                                uncheckedTrackColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        )
+                    }
+                }
+
+                item {
                     Text(
                         "Active Rules",
                         style = MaterialTheme.typography.titleLarge,
@@ -436,6 +480,35 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    if (showDeleteAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllDialog = false },
+            title = { Text("Confirm Deletion") },
+            text = { Text("Are you sure you want to delete all blocking rules? This action cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch(Dispatchers.IO) {
+                            database.blockingRuleDao().deleteAllRules()
+                            withContext(Dispatchers.Main) {
+                                refreshRules()
+                            }
+                        }
+                        showDeleteAllDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete All")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAllDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showAddDialog) {

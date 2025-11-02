@@ -13,6 +13,8 @@ import androidx.room.Delete
 import androidx.room.Query
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.silenthours.BlockingRuleEntity
+import com.example.silenthours.BlockingRuleDao
 
 @Entity(tableName = "blocking_rules")
 data class BlockingRuleEntity(
@@ -63,6 +65,9 @@ interface BlockingRuleDao {
 
     @Query("UPDATE blocking_rules SET isEnabled = :isEnabled")
     suspend fun updateAllRulesEnabled(isEnabled: Boolean)
+
+    @Query("DELETE FROM blocking_rules")
+    suspend fun deleteAllRules()
 }
 
 @Dao
