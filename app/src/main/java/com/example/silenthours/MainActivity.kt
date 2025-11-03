@@ -100,6 +100,7 @@ fun HomeScreen(
     var showUpgradeSheet by remember { mutableStateOf(false) }
     var blockingRules by remember { mutableStateOf(listOf<BlockingRule>()) }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
+    var ruleToEdit by remember { mutableStateOf<BlockingRule?>(null) }
 
 
     val database = remember { BlockingRuleDatabase.getDatabase(context) }
@@ -438,7 +439,7 @@ fun HomeScreen(
                     BlockingRuleCard(
                         rule = rule,
                         isEnabled = isBlockingEnabled,
-                        isDarkMode = isDarkMode,
+                        onEdit = { ruleToEdit = rule },
                         onDelete = {
                             coroutineScope.launch(Dispatchers.IO) {
                                 if (rule.groupId != null) {
@@ -472,9 +473,6 @@ fun HomeScreen(
                                     }
                                 }
                             }
-                        },
-                        onUpdate = {
-                            refreshRules()
                         }
                     )
                 }
@@ -509,6 +507,39 @@ fun HomeScreen(
                 }
             }
         )
+    }
+
+    if (ruleToEdit != null) {
+        ModalBottomSheet(
+            onDismissRequest = { ruleToEdit = null },
+            sheetState = rememberModalBottomSheetState()
+        ) {
+            EditRuleContent(
+                rule = ruleToEdit!!,
+                coroutineScope = coroutineScope,
+                isDarkMode = isDarkMode,
+                onSave = {
+                    ruleToEdit = null
+                    refreshRules()
+                },
+                onCancel = { ruleToEdit = null },
+                onDelete = {
+                    coroutineScope.launch(Dispatchers.IO) {
+                        if (ruleToEdit!!.groupId != null) {
+                            val rulesToDelete = database.blockingRuleDao().getRulesByGroupId(ruleToEdit!!.groupId!!)
+                            rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
+                        } else {
+                            val rulesToDelete = database.blockingRuleDao().getRuleByPhoneNumber(ruleToEdit!!.phoneNumber)
+                            rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
+                        }
+                        withContext(Dispatchers.Main) {
+                            ruleToEdit = null
+                            refreshRules()
+                        }
+                    }
+                }
+            )
+        }
     }
 
     if (showAddDialog) {
@@ -1249,15 +1280,11 @@ fun DayBlockingRow(
 fun BlockingRuleCard(
     rule: BlockingRule,
     isEnabled: Boolean,
-    isDarkMode: Boolean,
-    onUpdate: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
     onToggle: (BlockingRule, Boolean) -> Unit
 ) {
     val context = LocalContext.current
-    var isExpanded by remember { mutableStateOf(false) }
-    val rotationAngle by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f)
-    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier.alpha(if (isEnabled) 1f else 0.5f)
@@ -1269,7 +1296,7 @@ fun BlockingRuleCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = isEnabled) { isExpanded = !isExpanded }
+                    .clickable(enabled = isEnabled, onClick = onEdit)
                     .padding(20.dp)
             ) {
                 Row(
@@ -1370,27 +1397,9 @@ fun BlockingRuleCard(
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
                     contentDescription = "Expand",
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .rotate(rotationAngle)
+                    modifier = Modifier.align(Alignment.BottomEnd)
                 )
             }
-        }
-        AnimatedVisibility(visible = isExpanded) {
-            EditRuleContent(
-                rule = rule,
-                coroutineScope = coroutineScope,
-                isDarkMode = isDarkMode,
-                onSave = {
-                    isExpanded = false
-                    onUpdate()
-                },
-                onCancel = { isExpanded = false },
-                onDelete = {
-                    isExpanded = false
-                    onDelete()
-                }
-            )
         }
     }
 }
@@ -1458,63 +1467,69 @@ fun EditRuleContent(
 
 
     Column(modifier = Modifier.padding(16.dp)) {
-        Text(
-            "Schedule",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-
-        daysState.forEachIndexed { index, day ->
-            val times = dayTimes[day.name] ?: Pair("22:00", "07:00")
-            DayBlockingRow(
-                day = day,
-                onEnableChange = {
-                    HapticFeedback.performClick(context)
-                    daysState[index] = day.copy(enabled = it)
-                },
-                onAllDayChange = {
-                    HapticFeedback.performClick(context)
-                    daysState[index] = day.copy(allDay = it)
-                },
-                startTime = times.first,
-                endTime = times.second,
-                onStartTimeChange = { dayTimes[day.name] = times.copy(first = it) },
-                onEndTimeChange = { dayTimes[day.name] = times.copy(second = it) },
-                context = context,
-                isDarkMode = isDarkMode
-            )
-            if (index < daysState.size - 1) Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-        HorizontalDivider()
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Emergency Bypass",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
+            Text(
+                "Schedule",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            daysState.forEachIndexed { index, day ->
+                val times = dayTimes[day.name] ?: Pair("22:00", "07:00")
+                DayBlockingRow(
+                    day = day,
+                    onEnableChange = {
+                        HapticFeedback.performClick(context)
+                        daysState[index] = day.copy(enabled = it)
+                    },
+                    onAllDayChange = {
+                        HapticFeedback.performClick(context)
+                        daysState[index] = day.copy(allDay = it)
+                    },
+                    startTime = times.first,
+                    endTime = times.second,
+                    onStartTimeChange = { dayTimes[day.name] = times.copy(first = it) },
+                    onEndTimeChange = { dayTimes[day.name] = times.copy(second = it) },
+                    context = context,
+                    isDarkMode = isDarkMode
                 )
-                Text(
-                    "Allow if retried within ${retryWindow} min",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                if (index < daysState.size - 1) Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Emergency Bypass",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "Allow if retried within ${retryWindow} min",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = emergencyBypass,
+                    onCheckedChange = {
+                        HapticFeedback.performClick(context)
+                        emergencyBypass = it
+                    }
                 )
             }
-            Switch(
-                checked = emergencyBypass,
-                onCheckedChange = {
-                    HapticFeedback.performClick(context)
-                    emergencyBypass = it
-                }
-            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
