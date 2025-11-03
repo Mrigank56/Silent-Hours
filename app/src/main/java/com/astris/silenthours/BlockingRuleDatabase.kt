@@ -1,4 +1,4 @@
-package com.example.silenthours
+package com.astris.silenthours
 
 import android.content.Context
 import androidx.room.Database
@@ -13,8 +13,6 @@ import androidx.room.Delete
 import androidx.room.Query
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.example.silenthours.BlockingRuleEntity
-import com.example.silenthours.BlockingRuleDao
 
 @Entity(tableName = "blocking_rules")
 data class BlockingRuleEntity(

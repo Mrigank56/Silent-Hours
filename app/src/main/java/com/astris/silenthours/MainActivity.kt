@@ -1,11 +1,10 @@
-package com.example.silenthours
+package com.astris.silenthours
 
 import android.Manifest
 import android.app.Activity
 import android.app.TimePickerDialog
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
@@ -36,10 +35,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
-import com.example.callblocker.ui.theme.SilentHoursTheme
+import com.astris.callblocker.ui.theme.SilentHoursTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalTime

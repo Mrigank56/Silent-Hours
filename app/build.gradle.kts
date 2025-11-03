@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.silenthours"
+    namespace = "com.astris.silenthours"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.silenthours"
+        applicationId = "com.astris.silenthours"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

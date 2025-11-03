@@ -1,4 +1,4 @@
-package com.example.silenthours
+package com.astris.silenthours
 
 import android.app.Activity
 import android.content.Context
@@ -6,7 +6,6 @@ import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
-import androidx.datastore.preferences.core.Preferences
 import com.android.billingclient.api.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

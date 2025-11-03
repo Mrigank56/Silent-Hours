@@ -1,4 +1,4 @@
-package com.example.silenthours.ui.theme
+package com.astris.silenthours.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

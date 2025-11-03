@@ -1,4 +1,4 @@
-package com.example.silenthours
+package com.astris.silenthours
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
