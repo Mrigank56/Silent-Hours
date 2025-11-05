@@ -16,11 +16,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -30,8 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
@@ -99,6 +103,7 @@ fun HomeScreen(
     var blockingRules by remember { mutableStateOf(listOf<BlockingRule>()) }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
     var ruleToEdit by remember { mutableStateOf<BlockingRule?>(null) }
+    var isFabMenuOpen by remember { mutableStateOf(false) }
 
 
     val database = remember { BlockingRuleDatabase.getDatabase(context) }
@@ -252,7 +257,6 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            var isFabMenuOpen by remember { mutableStateOf(false) }
             val rotationAngle by animateFloatAsState(targetValue = if (isFabMenuOpen) 45f else 0f)
 
             Column(
@@ -264,7 +268,7 @@ fun HomeScreen(
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        SmallFloatingActionButton(
+                        ElevatedCard(
                             onClick = {
                                 if (isPremium) {
                                     showAddGroupDialog = true
@@ -273,13 +277,28 @@ fun HomeScreen(
                                 }
                                 isFabMenuOpen = false
                             },
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            shape = RoundedCornerShape(16.dp)
                         ) {
-                            Icon(Icons.Default.GroupAdd, "Add Group")
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    "Add Group",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                SmallFloatingActionButton(
+                                    onClick = {},
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ) {
+                                    Icon(Icons.Default.GroupAdd, "Add Group")
+                                }
+                            }
                         }
-
-                        SmallFloatingActionButton(
+                        ElevatedCard(
                             onClick = {
                                 if (isPremium || blockingRules.size < 3) {
                                     showAddDialog = true
@@ -288,10 +307,26 @@ fun HomeScreen(
                                 }
                                 isFabMenuOpen = false
                             },
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            shape = RoundedCornerShape(16.dp)
                         ) {
-                            Icon(Icons.Default.PersonAdd, "Add Contact")
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    "Add Contact",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                SmallFloatingActionButton(
+                                    onClick = {},
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ) {
+                                    Icon(Icons.Default.PersonAdd, "Add Contact")
+                                }
+                            }
                         }
                     }
                 }
@@ -310,175 +345,190 @@ fun HomeScreen(
             }
         }
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
-            if (!hasCallScreeningRole && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                item {
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(20.dp)) {
+        Box {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                if (!hasCallScreeningRole && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    item {
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.elevatedCardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Text(
+                                    "⚠️ Permission Required",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Enable Call Screening to block calls automatically.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                FilledTonalButton(
+                                    onClick = {
+                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                                            val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
+                                            val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_CALL_SCREENING)
+                                            requestRoleLauncher.launch(intent)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.error,
+                                        contentColor = MaterialTheme.colorScheme.onError
+                                    )
+                                ) {
+                                    Text("Enable Now")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (blockingRules.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp)
+                                .clickable { showAddDialog = true },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Text(
-                                "⚠️ Permission Required",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onErrorContainer
+                                "No blocking rules yet",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "Enable Call Screening to block calls automatically.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
+                                "Create rules to block calls during specific times",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            FilledTonalButton(
-                                onClick = {
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                                        val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
-                                        val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_CALL_SCREENING)
-                                        requestRoleLauncher.launch(intent)
+                            Spacer(modifier = Modifier.height(32.dp))
+                            Text(
+                                "Tap + to add a contact",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(32.dp))
+                        }
+                    }
+                } else {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Enable Call Blocking",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Switch(
+                                checked = isBlockingEnabled,
+                                onCheckedChange = { isEnabled ->
+                                    coroutineScope.launch {
+                                        appSettings.setBlockingEnabled(isEnabled)
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                    contentColor = MaterialTheme.colorScheme.onError
+                                thumbContent = {
+                                    Text(
+                                        if (isBlockingEnabled) "ON" else "OFF",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                                    uncheckedThumbColor = MaterialTheme.colorScheme.error,
+                                    uncheckedTrackColor = MaterialTheme.colorScheme.errorContainer
                                 )
-                            ) {
-                                Text("Enable Now")
-                            }
+                            )
                         }
+                    }
+
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Active Rules",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    items(blockingRules, key = { it.id }) { rule ->
+                        BlockingRuleCard(
+                            rule = rule,
+                            isEnabled = isBlockingEnabled,
+                            onEdit = { ruleToEdit = rule },
+                            onDelete = {
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    if (rule.groupId != null) {
+                                        val rulesToDelete = database.blockingRuleDao().getRulesByGroupId(rule.groupId)
+                                        rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
+                                    } else {
+                                        val rulesToDelete = database.blockingRuleDao().getRuleByPhoneNumber(rule.phoneNumber)
+                                        rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        refreshRules()
+                                    }
+                                }
+                            },
+                            onToggle = { toggleRule, enabled ->
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    if (toggleRule.groupId != null) {
+                                        val rulesToUpdate = database.blockingRuleDao().getRulesByGroupId(toggleRule.groupId)
+                                        rulesToUpdate.forEach { ruleEntity ->
+                                            database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
+                                        }
+                                    } else {
+                                        val rulesToUpdate = database.blockingRuleDao().getRuleByPhoneNumber(toggleRule.phoneNumber)
+                                        rulesToUpdate.forEach { ruleEntity ->
+                                            database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
+                                        }
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        blockingRules = blockingRules.map {
+                                            if (it.id == toggleRule.id) it.copy(isEnabled = enabled) else it
+                                        }
+                                    }
+                                }
+                            }
+                        )
                     }
                 }
             }
-
-            if (blockingRules.isEmpty()) {
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp)
-                            .clickable { showAddDialog = true },
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            "No blocking rules yet",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "Create rules to block calls during specific times",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                        Text(
-                            "Tap + to add a contact",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                    }
-                }
-            } else {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            "Enable Call Blocking",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Switch(
-                            checked = isBlockingEnabled,
-                            onCheckedChange = { isEnabled ->
-                                coroutineScope.launch {
-                                    appSettings.setBlockingEnabled(isEnabled)
-                                }
-                            },
-                            thumbContent = {
-                                Text(
-                                    if (isBlockingEnabled) "ON" else "OFF",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.error,
-                                uncheckedTrackColor = MaterialTheme.colorScheme.errorContainer
-                            )
-                        )
-                    }
-                }
-
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Active Rules",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                items(blockingRules, key = { it.id }) { rule ->
-                    BlockingRuleCard(
-                        rule = rule,
-                        isEnabled = isBlockingEnabled,
-                        onEdit = { ruleToEdit = rule },
-                        onDelete = {
-                            coroutineScope.launch(Dispatchers.IO) {
-                                if (rule.groupId != null) {
-                                    val rulesToDelete = database.blockingRuleDao().getRulesByGroupId(rule.groupId)
-                                    rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
-                                } else {
-                                    val rulesToDelete = database.blockingRuleDao().getRuleByPhoneNumber(rule.phoneNumber)
-                                    rulesToDelete.forEach { database.blockingRuleDao().delete(it) }
-                                }
-                                withContext(Dispatchers.Main) {
-                                    refreshRules()
-                                }
-                            }
+            AnimatedVisibility(visible = isFabMenuOpen) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            isFabMenuOpen = false
                         },
-                        onToggle = { toggleRule, enabled ->
-                            coroutineScope.launch(Dispatchers.IO) {
-                                if (toggleRule.groupId != null) {
-                                    val rulesToUpdate = database.blockingRuleDao().getRulesByGroupId(toggleRule.groupId)
-                                    rulesToUpdate.forEach { ruleEntity ->
-                                        database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
-                                    }
-                                } else {
-                                    val rulesToUpdate = database.blockingRuleDao().getRuleByPhoneNumber(toggleRule.phoneNumber)
-                                    rulesToUpdate.forEach { ruleEntity ->
-                                        database.blockingRuleDao().update(ruleEntity.copy(isEnabled = enabled))
-                                    }
-                                }
-                                withContext(Dispatchers.Main) {
-                                    blockingRules = blockingRules.map {
-                                        if (it.id == toggleRule.id) it.copy(isEnabled = enabled) else it
-                                    }
-                                }
-                            }
-                        }
-                    )
-                }
+                    color = Color.Black.copy(alpha = 0.6f)
+                ) {}
             }
         }
     }
@@ -683,7 +733,7 @@ fun AddGroupDialog(
     }
 
     var emergencyBypass by remember { mutableStateOf(true) }
-    var retryWindow by remember { mutableStateOf(5) }
+    var retryWindow by remember { mutableStateOf("5") }
 
     Dialog(onDismissRequest = onDismiss) {
         ElevatedCard(
@@ -844,6 +894,18 @@ fun AddGroupDialog(
                         )
                     }
 
+                    AnimatedVisibility(visible = emergencyBypass) {
+                        OutlinedTextField(
+                            value = retryWindow,
+                            onValueChange = { retryWindow = it.filter { char -> char.isDigit() } },
+                            label = { Text("Retry Window (minutes)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
                         onClick = {
@@ -869,7 +931,7 @@ fun AddGroupDialog(
                                                     endTime = endTime,
                                                     daysOfWeek = (index + 1).toString(),
                                                     allowEmergency = emergencyBypass,
-                                                    retryWindow = retryWindow,
+                                                    retryWindow = retryWindow.toIntOrNull() ?: 5,
                                                     isEnabled = true,
                                                     createdAt = System.currentTimeMillis(),
                                                     groupName = groupName,
@@ -987,7 +1049,7 @@ fun AddBlockDialog(
     }
 
     var emergencyBypass by remember { mutableStateOf(true) }
-    var retryWindow by remember { mutableStateOf(5) }
+    var retryWindow by remember { mutableStateOf("5") }
 
     Dialog(onDismissRequest = onDismiss) {
         ElevatedCard(
@@ -1095,6 +1157,18 @@ fun AddBlockDialog(
                         )
                     }
 
+                    AnimatedVisibility(visible = emergencyBypass) {
+                        OutlinedTextField(
+                            value = retryWindow,
+                            onValueChange = { retryWindow = it.filter { char -> char.isDigit() } },
+                            label = { Text("Retry Window (minutes)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
                         onClick = {
@@ -1119,7 +1193,7 @@ fun AddBlockDialog(
                                                     endTime = endTime,
                                                     daysOfWeek = (index + 1).toString(),
                                                     allowEmergency = emergencyBypass,
-                                                    retryWindow = retryWindow,
+                                                    retryWindow = retryWindow.toIntOrNull() ?: 5,
                                                     isEnabled = true,
                                                     createdAt = System.currentTimeMillis()
                                                 )
@@ -1466,7 +1540,7 @@ fun EditRuleContent(
 
 
     var emergencyBypass by remember { mutableStateOf(rule.allowEmergency) }
-    var retryWindow by remember { mutableStateOf(5) }
+    var retryWindow by remember { mutableStateOf((rule.retryWindow ?: 5).toString()) }
 
 
     Column(modifier = Modifier.padding(16.dp)) {
@@ -1533,6 +1607,18 @@ fun EditRuleContent(
                     }
                 )
             }
+
+            AnimatedVisibility(visible = emergencyBypass) {
+                OutlinedTextField(
+                    value = retryWindow,
+                    onValueChange = { retryWindow = it.filter { char -> char.isDigit() } },
+                    label = { Text("Retry Window (minutes)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -1569,7 +1655,7 @@ fun EditRuleContent(
                                         endTime = endTime,
                                         daysOfWeek = (index + 1).toString(),
                                         allowEmergency = emergencyBypass,
-                                        retryWindow = retryWindow,
+                                        retryWindow = retryWindow.toIntOrNull() ?: 5,
                                         isEnabled = rule.isEnabled,
                                         createdAt = System.currentTimeMillis(),
                                         groupName = rule.groupName,
@@ -1625,7 +1711,8 @@ data class BlockingRule(
     val allowEmergency: Boolean,
     val isEnabled: Boolean,
     val groupName: String? = null,
-    val groupId: String? = null
+    val groupId: String? = null,
+    val retryWindow: Int? = 5
 )
 
 data class DayBlockingState(
