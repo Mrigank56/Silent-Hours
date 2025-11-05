@@ -40,10 +40,14 @@ class BillingManager(
     }
 
     private fun setupBillingClient() {
+        if (billingClient != null && billingClient!!.isReady) return
+
         billingClient = BillingClient.newBuilder(context)
             .setListener { billingResult, purchases ->
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && purchases != null) {
                     handlePurchases(purchases)
+                } else {
+                    Log.e(TAG, "Purchase update failed: ${billingResult.debugMessage}")
                 }
             }
             .enablePendingPurchases()
@@ -61,76 +65,91 @@ class BillingManager(
             }
 
             override fun onBillingServiceDisconnected() {
-                Log.d(TAG, "Billing service disconnected")
-                // Try to reconnect
-                setupBillingClient()
+                Log.w(TAG, "Billing service disconnected — retrying...")
+                reconnect()
             }
         })
     }
 
-    private fun queryProductDetails() {
-        val productList = listOf(
-            QueryProductDetailsParams.Product.newBuilder()
-                .setProductId(PREMIUM_PRODUCT_ID)
-                .setProductType(BillingClient.ProductType.INAPP)
-                .build()
-        )
+    private fun reconnect() {
+        CoroutineScope(Dispatchers.IO).launch {
+            kotlinx.coroutines.delay(2000)
+            setupBillingClient()
+        }
+    }
 
+// Load Product detailsa
+    private fun queryProductDetails() {
         val params = QueryProductDetailsParams.newBuilder()
-            .setProductList(productList)
+            .setProductList(
+                listOf(
+                    QueryProductDetailsParams.Product.newBuilder()
+                        .setProductId(PREMIUM_PRODUCT_ID)
+                        .setProductType(BillingClient.ProductType.INAPP)
+                        .build()
+                )
+            )
             .build()
 
-        billingClient?.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                productDetails = productDetailsList.firstOrNull()
-                Log.d(TAG, "Product details loaded: ${productDetails?.name}")
+        billingClient?.queryProductDetailsAsync(params) { billingResult, detailsList ->
+            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && detailsList.isNotEmpty()) {
+                productDetails = detailsList.first()
+                Log.d(TAG, "Loaded product details for: ${productDetails?.name}")
             } else {
                 Log.e(TAG, "Failed to query product details: ${billingResult.debugMessage}")
             }
         }
     }
 
+// Check if already purchased
     private fun queryPurchases() {
-        billingClient?.queryPurchasesAsync(
-            QueryPurchasesParams.newBuilder()
-                .setProductType(BillingClient.ProductType.INAPP)
-                .build()
-        ) { billingResult, purchases ->
+        val params = QueryPurchasesParams.newBuilder()
+            .setProductType(BillingClient.ProductType.INAPP)
+            .build()
+
+        billingClient?.queryPurchasesAsync(params) { billingResult, purchases ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                Log.d(TAG, "Existing purchases: ${purchases.size}")
                 handlePurchases(purchases)
+            } else {
+                Log.e(TAG, "Failed to query purchases: ${billingResult.debugMessage}")
             }
         }
     }
 
     private fun handlePurchases(purchases: List<Purchase>) {
-        for (purchase in purchases) {
+        purchases.forEach { purchase ->
             if (purchase.products.contains(PREMIUM_PRODUCT_ID) &&
-                purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
-
-                // Verify and acknowledge purchase
+                purchase.purchaseState == Purchase.PurchaseState.PURCHASED
+            ) {
+                // Acknowledge and grant premium
                 if (!purchase.isAcknowledged) {
                     acknowledgePurchase(purchase)
+                } else {
+                    grantPremium()
                 }
-
-                // Grant premium
-                grantPremium()
-                Log.d(TAG, "Premium purchase found and verified")
+                Log.d(TAG, "Purchase handled: ${purchase.products}")
             }
         }
     }
 
+//    Acknowledgment fof the purchase
     private fun acknowledgePurchase(purchase: Purchase) {
-        val acknowledgePurchaseParams = AcknowledgePurchaseParams.newBuilder()
+        val params = AcknowledgePurchaseParams.newBuilder()
             .setPurchaseToken(purchase.purchaseToken)
             .build()
 
-        billingClient?.acknowledgePurchase(acknowledgePurchaseParams) { billingResult ->
+        billingClient?.acknowledgePurchase(params) { billingResult ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                Log.d(TAG, "Purchase acknowledged")
+                Log.d(TAG, "Purchase acknowledged successfully")
+                grantPremium()
+            } else {
+                Log.e(TAG, "Failed to acknowledge purchase: ${billingResult.debugMessage}")
             }
         }
     }
 
+//Local save purchase key
     private fun grantPremium() {
         CoroutineScope(Dispatchers.IO).launch {
             context.dataStore.edit { prefs ->
@@ -142,37 +161,38 @@ class BillingManager(
         }
     }
 
-    suspend fun isPremium(): Boolean {
-        return isPremiumFlow.first()
-    }
+    /** Public API — returns true if premium already unlocked **/
+    suspend fun isPremium(): Boolean = isPremiumFlow.first()
 
+//    LAUCNH gOOOGLE play billing
     fun purchasePremium(activity: Activity) {
         val details = productDetails
         if (details == null) {
-            Log.e(TAG, "Product details not loaded yet")
+            Log.w(TAG, "Product details not loaded yet — retrying query")
+            queryProductDetails()
             return
         }
 
-        val productDetailsParamsList = listOf(
+        val paramsList = listOf(
             BillingFlowParams.ProductDetailsParams.newBuilder()
                 .setProductDetails(details)
                 .build()
         )
 
         val billingFlowParams = BillingFlowParams.newBuilder()
-            .setProductDetailsParamsList(productDetailsParamsList)
+            .setProductDetailsParamsList(paramsList)
             .build()
 
-        val billingResult = billingClient?.launchBillingFlow(activity, billingFlowParams)
-
-        if (billingResult?.responseCode == BillingClient.BillingResponseCode.OK) {
-            Log.d(TAG, "Billing flow launched")
+        val result = billingClient?.launchBillingFlow(activity, billingFlowParams)
+        if (result?.responseCode == BillingClient.BillingResponseCode.OK) {
+            Log.d(TAG, "Billing flow launched successfully")
         } else {
-            Log.e(TAG, "Failed to launch billing flow: ${billingResult?.debugMessage}")
+            Log.e(TAG, "Failed to launch billing flow: ${result?.debugMessage}")
         }
     }
 
     fun endConnection() {
         billingClient?.endConnection()
+        billingClient = null
     }
 }

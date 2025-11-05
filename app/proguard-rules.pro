@@ -1,21 +1,46 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+############################################################
+# 🧾 General Project Rules
+############################################################
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Keep line numbers for better crash reports
+-keepattributes SourceFile,LineNumberTable
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Kotlin metadata (needed for reflection, coroutines, DataStore, etc.)
+-keepclassmembers class kotlin.Metadata { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Prevent obfuscation of your app’s data classes and sealed classes
+-keep class com.astris.silenthours.** { *; }
+
+############################################################
+# ☁️ Google Play Billing
+############################################################
+
+# Keep all BillingClient-related classes
+-keep class com.android.billingclient.api.** { *; }
+-dontwarn com.android.billingclient.api.**
+
+############################################################
+# 💾 Jetpack DataStore
+############################################################
+
+# DataStore uses Kotlin coroutines and reflection
+-keep class androidx.datastore.** { *; }
+-keep class kotlinx.coroutines.** { *; }
+-dontwarn androidx.datastore.**
+-dontwarn kotlinx.coroutines.**
+
+############################################################
+# 🧭 AndroidX and Compose (safe defaults)
+############################################################
+
+# Compose UI reflection safety
+-keep class androidx.compose.** { *; }
+-dontwarn androidx.compose.**
+
+# Lifecycle, ViewModel, Activity, etc.
+-keep class androidx.lifecycle.** { *; }
+-dontwarn androidx.lifecycle.**
+
+# AndroidX Core / KTX extensions
+-dontwarn androidx.core.**
+

@@ -624,10 +624,7 @@ fun HomeScreen(
     if (showUpgradeSheet) {
         UpgradeBottomSheet(
             onDismiss = { showUpgradeSheet = false },
-            onUpgrade = {
-                billingManager.purchasePremium(activity)
-                showUpgradeSheet = false
-            }
+            billingManager = billingManager
         )
     }
 }
@@ -636,8 +633,10 @@ fun HomeScreen(
 @Composable
 fun UpgradeBottomSheet(
     onDismiss: () -> Unit,
-    onUpgrade: () -> Unit
+    billingManager: BillingManager
 ) {
+    val context = LocalContext.current
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState()
@@ -655,15 +654,22 @@ fun UpgradeBottomSheet(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "Unlock unlimited blocking rules and the ability to create groups for just ₹199 (one-time payment).",
+                "Unlock unlimited blocking rules and create groups for just ₹199 (one-time payment).",
                 style = MaterialTheme.typography.bodyLarge
             )
+
             Button(
-                onClick = onUpgrade,
+                onClick = {
+                    (context as? Activity)?.let {
+                        billingManager.purchasePremium(it)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Upgrade Now for ₹199")
             }
+
+
             TextButton(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth()
@@ -673,6 +679,7 @@ fun UpgradeBottomSheet(
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
