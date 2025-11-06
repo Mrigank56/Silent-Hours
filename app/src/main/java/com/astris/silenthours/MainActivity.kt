@@ -46,6 +46,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.play.core.install.model.InstallStatus
+import com.google.android.play.core.install.model.UpdateAvailability
 
 
 
@@ -110,6 +114,37 @@ fun HomeScreen(
     val coroutineScope = rememberCoroutineScope()
 
     var hasCallScreeningRole by remember { mutableStateOf(false) }
+
+    val appUpdateManager = AppUpdateManagerFactory.create(context)
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        appUpdateManager.appUpdateInfo.addOnSuccessListener { appUpdateInfo ->
+            if (appUpdateInfo.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                && appUpdateInfo.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)
+            ) {
+                appUpdateManager.startUpdateFlowForResult(
+                    appUpdateInfo,
+                    AppUpdateType.FLEXIBLE,
+                    activity,
+                    0
+                )
+            }
+        }
+        appUpdateManager.registerListener { state ->
+            if (state.installStatus() == InstallStatus.DOWNLOADED) {
+                coroutineScope.launch {
+                    val result = snackbarHostState.showSnackbar(
+                        message = "An update has just been downloaded.",
+                        actionLabel = "RESTART",
+                        duration = SnackbarDuration.Indefinite
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        appUpdateManager.completeUpdate()
+                    }
+                }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
@@ -189,6 +224,7 @@ fun HomeScreen(
 
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
