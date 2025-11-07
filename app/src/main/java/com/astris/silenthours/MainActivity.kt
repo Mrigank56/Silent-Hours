@@ -40,16 +40,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.astris.callblocker.ui.theme.SilentHoursTheme
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.play.core.install.model.InstallStatus
+import com.google.android.play.core.install.model.UpdateAvailability
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import com.google.android.play.core.appupdate.AppUpdateManagerFactory
-import com.google.android.play.core.install.model.AppUpdateType
-import com.google.android.play.core.install.model.InstallStatus
-import com.google.android.play.core.install.model.UpdateAvailability
 
 
 
@@ -117,6 +117,7 @@ fun HomeScreen(
 
     val appUpdateManager = AppUpdateManagerFactory.create(context)
     val snackbarHostState = remember { SnackbarHostState() }
+
     LaunchedEffect(Unit) {
         appUpdateManager.appUpdateInfo.addOnSuccessListener { appUpdateInfo ->
             if (appUpdateInfo.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
@@ -130,6 +131,7 @@ fun HomeScreen(
                 )
             }
         }
+
         appUpdateManager.registerListener { state ->
             if (state.installStatus() == InstallStatus.DOWNLOADED) {
                 coroutineScope.launch {
@@ -145,6 +147,7 @@ fun HomeScreen(
             }
         }
     }
+
 
     LaunchedEffect(Unit) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
@@ -306,11 +309,8 @@ fun HomeScreen(
                     ) {
                         ElevatedCard(
                             onClick = {
-                                if (isPremium) {
-                                    showAddGroupDialog = true
-                                } else {
-                                    showUpgradeSheet = true
-                                }
+                                // TODO: Temporarily unlocked for testing. Revert to `if (isPremium)` before release.
+                                showAddGroupDialog = true
                                 isFabMenuOpen = false
                             },
                             shape = RoundedCornerShape(16.dp)
@@ -326,7 +326,11 @@ fun HomeScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 SmallFloatingActionButton(
-                                    onClick = {},
+                                    onClick = {
+                                        // TODO: Temporarily unlocked for testing. Revert to `if (isPremium)` before release.
+                                        showAddGroupDialog = true
+                                        isFabMenuOpen = false
+                                    },
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                                 ) {
@@ -356,7 +360,14 @@ fun HomeScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 SmallFloatingActionButton(
-                                    onClick = {},
+                                    onClick = {
+                                        if (isPremium || blockingRules.size < 3) {
+                                            showAddDialog = true
+                                        } else {
+                                            showUpgradeSheet = true
+                                        }
+                                        isFabMenuOpen = false
+                                    },
                                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                                 ) {
@@ -660,7 +671,10 @@ fun HomeScreen(
     if (showUpgradeSheet) {
         UpgradeBottomSheet(
             onDismiss = { showUpgradeSheet = false },
-            billingManager = billingManager
+            onUpgrade = {
+                billingManager.purchasePremium(activity)
+                showUpgradeSheet = false
+            }
         )
     }
 }
@@ -669,10 +683,8 @@ fun HomeScreen(
 @Composable
 fun UpgradeBottomSheet(
     onDismiss: () -> Unit,
-    billingManager: BillingManager
+    onUpgrade: () -> Unit
 ) {
-    val context = LocalContext.current
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState()
@@ -690,22 +702,18 @@ fun UpgradeBottomSheet(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "Unlock unlimited blocking rules and create groups for just ₹199 (one-time payment).",
+                "Unlock unlimited blocking rules and the ability to create groups for just ₹199 (one-time payment).",
                 style = MaterialTheme.typography.bodyLarge
             )
-
             Button(
                 onClick = {
-                    (context as? Activity)?.let {
-                        billingManager.purchasePremium(it)
-                    }
+                    onUpgrade()
+                    onDismiss()
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Upgrade Now for ₹199")
             }
-
-
             TextButton(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth()
@@ -715,7 +723,6 @@ fun UpgradeBottomSheet(
         }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
