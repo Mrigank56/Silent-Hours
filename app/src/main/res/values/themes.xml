@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.SilentHours" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Normal app theme -->
+    <style name="Theme.SilentHours" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/black</item>
+    </style>
+
+    <!-- Splash theme (used only at app launch) -->
+    <style name="Theme.SilentHours.Splash" parent="Theme.SilentHours">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
+
 </resources>
