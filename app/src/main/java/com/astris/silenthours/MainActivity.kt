@@ -309,8 +309,11 @@ fun HomeScreen(
                     ) {
                         ElevatedCard(
                             onClick = {
-                                // TODO: Temporarily unlocked for testing. Revert to `if (isPremium)` before release.
-                                showAddGroupDialog = true
+                                if (isPremium) {
+                                    showAddGroupDialog = true
+                                } else {
+                                    showUpgradeSheet = true
+                                }
                                 isFabMenuOpen = false
                             },
                             shape = RoundedCornerShape(16.dp)
@@ -327,8 +330,11 @@ fun HomeScreen(
                                 )
                                 SmallFloatingActionButton(
                                     onClick = {
-                                        // TODO: Temporarily unlocked for testing. Revert to `if (isPremium)` before release.
-                                        showAddGroupDialog = true
+                                        if (isPremium) {
+                                            showAddGroupDialog = true
+                                        } else {
+                                            showUpgradeSheet = true
+                                        }
                                         isFabMenuOpen = false
                                     },
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -481,7 +487,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                "Enable Call Blocking",
+                                "Enable/Disable Call Blocking",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -702,7 +708,7 @@ fun UpgradeBottomSheet(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "Unlock unlimited blocking rules and the ability to create groups for just ₹199 (one-time payment).",
+                "Unlock unlimited blocking rules and the ability to create groups for just a small fee (one-time fee for perpetual license. Connected to your Play account).",
                 style = MaterialTheme.typography.bodyLarge
             )
             Button(
@@ -712,7 +718,7 @@ fun UpgradeBottomSheet(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Upgrade Now for ₹199")
+                Text("Upgrade Now")
             }
             TextButton(
                 onClick = onDismiss,
