@@ -17,6 +17,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -55,6 +56,7 @@ import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
     private lateinit var billingManager: BillingManager
+    private lateinit var themeSettings: ThemeSettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,9 +64,17 @@ class MainActivity : ComponentActivity() {
         billingManager = BillingManager(this) { isPremium ->
             Log.d("MainActivity", "Premium status: $isPremium")
         }
+        themeSettings = ThemeSettings(this)
 
         setContent {
-            var isDarkMode by remember { mutableStateOf(true) }
+            val systemInDarkTheme = isSystemInDarkTheme()
+            val isThemeSetByUser = themeSettings.isThemeSetByUser
+            val isDarkMode by remember {
+                mutableStateOf(
+                    if (isThemeSetByUser) themeSettings.isDarkTheme
+                    else systemInDarkTheme
+                )
+            }
 
             SilentHoursTheme(darkTheme = isDarkMode) {
                 Surface(
@@ -73,7 +83,13 @@ class MainActivity : ComponentActivity() {
                 ) {
                     HomeScreen(
                         isDarkMode = isDarkMode,
-                        onThemeToggle = { isDarkMode = !isDarkMode },
+                        onThemeToggle = {
+                            val newTheme = !isDarkMode
+                            themeSettings.isDarkTheme = newTheme
+                            themeSettings.isThemeSetByUser = true
+                            // Recreate the activity to apply the new theme
+                            recreate()
+                        },
                         billingManager = billingManager,
                         activity = this
                     )
