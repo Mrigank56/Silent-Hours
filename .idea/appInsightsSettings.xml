@@ -9,10 +9,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.astris.silenthours" />
-                  <option name="mobileSdkAppId" value="1:1040291101835:android:1c514393da63278ebd288e" />
-                  <option name="projectId" value="silent-hours" />
-                  <option name="projectNumber" value="1040291101835" />
+                  <option name="appId" value="PLACEHOLDER" />
+                  <option name="mobileSdkAppId" value="" />
+                  <option name="projectId" value="" />
+                  <option name="projectNumber" value="" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

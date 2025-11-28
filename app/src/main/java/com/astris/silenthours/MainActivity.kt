@@ -8,7 +8,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -41,10 +40,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.astris.callblocker.ui.theme.SilentHoursTheme
-import com.google.android.play.core.appupdate.AppUpdateManagerFactory
-import com.google.android.play.core.install.model.AppUpdateType
-import com.google.android.play.core.install.model.InstallStatus
-import com.google.android.play.core.install.model.UpdateAvailability
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -55,15 +50,11 @@ import java.time.format.DateTimeFormatter
 
 
 class MainActivity : ComponentActivity() {
-    private lateinit var billingManager: BillingManager
     private lateinit var themeSettings: ThemeSettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        billingManager = BillingManager(this) { isPremium ->
-            Log.d("MainActivity", "Premium status: $isPremium")
-        }
         themeSettings = ThemeSettings(this)
 
         setContent {
@@ -90,17 +81,11 @@ class MainActivity : ComponentActivity() {
                             // Recreate the activity to apply the new theme
                             recreate()
                         },
-                        billingManager = billingManager,
                         activity = this
                     )
                 }
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        billingManager.endConnection()
     }
 }
 
@@ -109,17 +94,14 @@ class MainActivity : ComponentActivity() {
 fun HomeScreen(
     isDarkMode: Boolean,
     onThemeToggle: () -> Unit,
-    billingManager: BillingManager,
     activity: Activity
 ) {
     val context = LocalContext.current
     val appSettings = remember { AppSettings(context) }
     val isBlockingEnabled by appSettings.isBlockingEnabled.collectAsState(initial = true)
 
-    val isPremium by billingManager.isPremiumFlow.collectAsState(initial = false)
     var showAddDialog by remember { mutableStateOf(false) }
     var showAddGroupDialog by remember { mutableStateOf(false) }
-    var showUpgradeSheet by remember { mutableStateOf(false) }
     var blockingRules by remember { mutableStateOf(listOf<BlockingRule>()) }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
     var ruleToEdit by remember { mutableStateOf<BlockingRule?>(null) }
@@ -130,39 +112,6 @@ fun HomeScreen(
     val coroutineScope = rememberCoroutineScope()
 
     var hasCallScreeningRole by remember { mutableStateOf(false) }
-
-    val appUpdateManager = AppUpdateManagerFactory.create(context)
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(Unit) {
-        appUpdateManager.appUpdateInfo.addOnSuccessListener { appUpdateInfo ->
-            if (appUpdateInfo.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
-                && appUpdateInfo.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)
-            ) {
-                appUpdateManager.startUpdateFlowForResult(
-                    appUpdateInfo,
-                    AppUpdateType.FLEXIBLE,
-                    activity,
-                    0
-                )
-            }
-        }
-
-        appUpdateManager.registerListener { state ->
-            if (state.installStatus() == InstallStatus.DOWNLOADED) {
-                coroutineScope.launch {
-                    val result = snackbarHostState.showSnackbar(
-                        message = "An update has just been downloaded.",
-                        actionLabel = "RESTART",
-                        duration = SnackbarDuration.Indefinite
-                    )
-                    if (result == SnackbarResult.ActionPerformed) {
-                        appUpdateManager.completeUpdate()
-                    }
-                }
-            }
-        }
-    }
 
 
     LaunchedEffect(Unit) {
@@ -243,7 +192,6 @@ fun HomeScreen(
 
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -325,11 +273,7 @@ fun HomeScreen(
                     ) {
                         ElevatedCard(
                             onClick = {
-                                if (isPremium) {
-                                    showAddGroupDialog = true
-                                } else {
-                                    showUpgradeSheet = true
-                                }
+                                showAddGroupDialog = true
                                 isFabMenuOpen = false
                             },
                             shape = RoundedCornerShape(16.dp)
@@ -346,11 +290,7 @@ fun HomeScreen(
                                 )
                                 SmallFloatingActionButton(
                                     onClick = {
-                                        if (isPremium) {
-                                            showAddGroupDialog = true
-                                        } else {
-                                            showUpgradeSheet = true
-                                        }
+                                        showAddGroupDialog = true
                                         isFabMenuOpen = false
                                     },
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -362,11 +302,7 @@ fun HomeScreen(
                         }
                         ElevatedCard(
                             onClick = {
-                                if (isPremium || blockingRules.size < 3) {
-                                    showAddDialog = true
-                                } else {
-                                    showUpgradeSheet = true
-                                }
+                                showAddDialog = true
                                 isFabMenuOpen = false
                             },
                             shape = RoundedCornerShape(16.dp)
@@ -383,11 +319,7 @@ fun HomeScreen(
                                 )
                                 SmallFloatingActionButton(
                                     onClick = {
-                                        if (isPremium || blockingRules.size < 3) {
-                                            showAddDialog = true
-                                        } else {
-                                            showUpgradeSheet = true
-                                        }
+                                        showAddDialog = true
                                         isFabMenuOpen = false
                                     },
                                     containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -688,61 +620,6 @@ fun HomeScreen(
                 showAddGroupDialog = false
             }
         )
-    }
-
-    if (showUpgradeSheet) {
-        UpgradeBottomSheet(
-            onDismiss = { showUpgradeSheet = false },
-            onUpgrade = {
-                billingManager.purchasePremium(activity)
-                showUpgradeSheet = false
-            }
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun UpgradeBottomSheet(
-    onDismiss: () -> Unit,
-    onUpgrade: () -> Unit
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                "Upgrade to Premium",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                "Unlock unlimited blocking rules and the ability to create groups for just a small fee (one-time fee for perpetual license. Connected to your Play account).",
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Button(
-                onClick = {
-                    onUpgrade()
-                    onDismiss()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Upgrade Now")
-            }
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Maybe Later")
-            }
-        }
     }
 }
 
