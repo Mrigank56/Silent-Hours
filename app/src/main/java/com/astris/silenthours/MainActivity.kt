@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.app.TimePickerDialog
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
@@ -60,7 +61,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val systemInDarkTheme = isSystemInDarkTheme()
             val isThemeSetByUser = themeSettings.isThemeSetByUser
-            val isDarkMode by remember {
+            var isDarkMode by remember {
                 mutableStateOf(
                     if (isThemeSetByUser) themeSettings.isDarkTheme
                     else systemInDarkTheme
@@ -102,6 +103,7 @@ fun HomeScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showAddGroupDialog by remember { mutableStateOf(false) }
+    var showSupportSheet by remember { mutableStateOf(false) }
     var blockingRules by remember { mutableStateOf(listOf<BlockingRule>()) }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
     var ruleToEdit by remember { mutableStateOf<BlockingRule?>(null) }
@@ -235,6 +237,21 @@ fun HomeScreen(
                                     )
                                 },
                                 onClick = { onThemeToggle() }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Support") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Favorite,
+                                        contentDescription = "Support",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                },
+                                onClick = {
+                                    showSupportSheet = true
+                                    menuExpanded = false
+                                }
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
@@ -561,6 +578,56 @@ fun HomeScreen(
                 }
             }
         )
+    }
+
+    if (showSupportSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSupportSheet = false },
+            sheetState = rememberModalBottomSheetState()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Support Development",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                ListItem(
+                    headlineContent = { Text("UPI") },
+                    leadingContent = {
+                        Icon(
+                            Icons.Default.AccountBalanceWallet,
+                            contentDescription = "UPI"
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("upi://pay?pa=9118491505@ptyes"))
+                        context.startActivity(intent)
+                        showSupportSheet = false
+                    }
+                )
+                ListItem(
+                    headlineContent = { Text("Ko-fi") },
+                    leadingContent = {
+                        Icon(
+                            Icons.Default.Coffee,
+                            contentDescription = "Ko-fi"
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ko-fi.com/mriganksharma"))
+                        context.startActivity(intent)
+                        showSupportSheet = false
+                    }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
     }
 
     if (ruleToEdit != null) {
