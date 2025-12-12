@@ -1,0 +1,9 @@
+Silent Hours lets you automatically block calls from selected contacts or groups during specific times or days.
+
+Features:
+• Per-contact or group-based call blocking
+• Custom schedules for each day
+• Emergency-bypass on repeated calls
+• No ads, no tracking, fully offline
+
+This app uses Android’s Call Screening API to silently reject calls. All data stays on your device.

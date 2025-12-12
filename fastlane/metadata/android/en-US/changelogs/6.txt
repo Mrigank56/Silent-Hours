@@ -1,0 +1,2 @@
+Initial F-Droid release.
+Added open-source license and metadata for distribution.
